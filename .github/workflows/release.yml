@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   docker-build-push:
-    name: Build Standard Docker Images
+    name: Build & Push Docker Images
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
