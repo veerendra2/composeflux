@@ -1,0 +1,36 @@
+---
+site_name: ComposeFlux Docs
+site_url: https://veerendra2.github.io/composeflux/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: black
+      accent: indigo
+
+nav:
+  - Home: index.md
+  - Introduction: Introduction.md
+  - Getting Started: GettingStarted.md
+  - Development: Development.md
+  - How-to Guides:
+      - Bitwarden Secrets Manager Setup: how-to-guides/Bitwarden.md
+      - Infisical Secrets Manager Setup: how-to-guides/Infisical.md
+      - GitHub Deploy Keys Setup: how-to-guides/GithubDeployKeys.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/veerendra2/composeflux
+      name: GitHub Repository
+    - icon: fontawesome/solid/scale-balanced
+      link: https://github.com/veerendra2/composeflux/blob/main/LICENSE
+      name: MIT License
+
+copyright: Copyright &copy; 2025 Veerendra K - MIT License

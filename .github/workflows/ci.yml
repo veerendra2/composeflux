@@ -1,0 +1,26 @@
+---
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  golangci-lint:
+    name: Lint Source Code
+    runs-on: ubuntu-slim
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Run Linter
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: ./
+          args: --timeout 3m

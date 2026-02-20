@@ -1,0 +1,133 @@
+---
+version: "3"
+silent: true
+
+vars:
+  MAIN_PACKAGE: ./cmd/composeflux
+  APP_NAME: composeflux
+  GOPATH_BIN:
+    sh: echo "$(go env GOPATH)/bin"
+  BRANCH:
+    sh: git rev-parse --abbrev-ref HEAD
+  BUILD_TIME:
+    sh: date '+%Y-%m-%d@%H:%M:%S'
+  BUILD_USER:
+    sh: id -un
+  REVISION:
+    sh: git rev-parse --short HEAD
+  VERSION:
+    sh: git describe --tags --always
+  COMPILER_CC: '{{if eq OS "linux"}}musl-gcc{{else if eq OS "darwin"}}clang{{end}}'
+  COMPILER_CXX: '{{if eq OS "darwin"}}clang++{{end}}'
+
+env:
+  GOBIN: "{{.GOPATH_BIN }}"
+  CGO_ENABLED: 1
+  CC: "{{.COMPILER_CC}}"
+  CXX: "{{.COMPILER_CXX}}"
+
+tasks:
+  run:
+    desc: Runs the main application
+    deps:
+      - vet
+    cmds:
+      - go run {{.MAIN_PACKAGE}}
+    env:
+      LOG_FORMAT: console
+      LOG_ADD_SOURCE: true
+      LOG_LEVEL: debug
+
+  compose:
+    desc: Run the application in development mode using Docker Compose
+    deps:
+      - vet
+    cmd: |
+      docker compose -f compose-dev.yml up \
+      --remove-orphans \
+      --force-recreate \
+      --build
+    env:
+      LOG_FORMAT: console
+      LOG_ADD_SOURCE: true
+      LOG_LEVEL: debug
+
+  lint:
+    desc: Run static analysis and code linting using golangci-lint
+    deps:
+      - install
+    cmds:
+      - golangci-lint run --timeout 3m
+
+  fmt:
+    desc: Formats all Go source files
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Examines Go source code and reports suspicious constructs
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Runs all tests in the project
+    aliases:
+      - tests
+    deps:
+      - vet
+    cmds:
+      - go test ./...
+
+  build:
+    desc: Build the application binary for the current platform
+    vars:
+      LINUX_LDFLAGS: >-
+        {{if eq OS "linux"}}
+        -linkmode external -extldflags '-static -Wl,-unresolved-symbols=ignore-all'
+        {{end}}
+    deps:
+      - vet
+    cmd: |
+      go build -ldflags "{{.LINUX_LDFLAGS}} \
+        -X github.com/veerendra2/gopackages/version.Version={{.VERSION}} \
+        -X github.com/veerendra2/gopackages/version.Revision={{.REVISION}} \
+        -X github.com/veerendra2/gopackages/version.Branch={{.BRANCH}} \
+        -X github.com/veerendra2/gopackages/version.BuildUser={{.BUILD_USER}} \
+        -X github.com/veerendra2/gopackages/version.BuildDate={{.BUILD_TIME}}" \
+        -o dist/{{.APP_NAME}} {{.MAIN_PACKAGE}}
+
+  build-docker:
+    desc: Build Docker image
+    cmds:
+      - docker build -t {{.APP_NAME}} .
+
+  security:
+    desc: Run security vulnerability scan
+    deps:
+      - install
+    cmds:
+      - govulncheck ./...
+
+  serve-docs:
+    aliases:
+      - docs
+    desc: Serve MkDocs documentation locally with live reload
+    cmd: mkdocs serve --dev-addr=127.0.0.1:8000 --livereload
+
+  install:
+    desc: Install required tools and dependencies
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    status:
+      - test -f {{.GOPATH_BIN}}/govulncheck
+      - test -f {{.GOPATH_BIN}}/golangci-lint
+
+  all:
+    desc: Run comprehensive checks;  format, lint, security and test
+    cmds:
+      - task fmt
+      - task lint
+      - task vet
+      - task security
+      - task test

@@ -1,0 +1,54 @@
+---
+name: Deploy Github Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Configure Git Credentials
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Set Cache ID Env
+        run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV
+
+      - name: Setup Cache
+        uses: actions/cache@v4
+        with:
+          key: mkdocs-material-${{ env.cache_id }}
+          path: ~/.cache
+          restore-keys: |
+            mkdocs-material-
+
+      # - name: Sync README to docs index
+      #   run: |
+      #     cp README.md docs/index.md
+      #     sed -i 's|./docs/assets/composeflux-banner.png|./assets/composeflux-banner.png|g' docs/index.md
+
+      - name: Install mkdocs-material
+        run: pip install mkdocs-material
+
+      - name: Deploy MkDocs
+        run: mkdocs gh-deploy --force
