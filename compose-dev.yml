@@ -1,0 +1,26 @@
+---
+name: composeflux
+services:
+  composeflux:
+    build: .
+    container_name: composeflux
+    environment:
+      # Reconcile Configuration
+      STACK_PATH: ${STACK_PATH}
+      GIT_REPO_URL: ${GIT_REPO_URL}
+      GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
+      LOG_ADD_SOURCE: ${LOG_ADD_SOURCE}
+      LOG_LEVEL: ${LOG_LEVEL}
+
+      # Bitwarden Secrets Manager Configuration
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER}
+      BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
+      BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
+      BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
+    hostname: composeflux
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - compose-stack:/opt/compose-stack
+volumes:
+  compose-stack:
+    name: compose-stack
