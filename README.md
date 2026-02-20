@@ -1,3 +1,5 @@
+![GitHub Repo stars](https://img.shields.io/github/stars/veerendra2/composeflux) ![GitHub forks](https://img.shields.io/github/forks/veerendra2/composeflux) ![GitHub License](https://img.shields.io/github/license/veerendra2/composeflux) ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/veerendra2/composeflux)
+
 # ComposeFlux
 
 > _\*Currently in beta_
