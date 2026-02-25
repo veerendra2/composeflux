@@ -11,18 +11,21 @@ import (
 	"github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
+	"github.com/docker/docker/api/types/build"
+	"github.com/docker/docker/api/types/filters"
+	dockerClient "github.com/docker/docker/client"
 	"github.com/sirupsen/logrus"
 )
 
 type Config struct {
 	RemoveOrphans bool `name:"remove-orphans" help:"Remove orphan containers" env:"REMOVE_ORPHANS" default:"true" group:"Docker Compose Options:"`
 }
-
 type Client interface {
 	LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error)
 
 	Down(ctx context.Context, projectName string) error
 	List(ctx context.Context) ([]api.Stack, error)
+	Prune(ctx context.Context)
 	Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error)
 	Pull(ctx context.Context, project *types.Project) error
 	Restart(ctx context.Context, projectName string) error
@@ -32,7 +35,7 @@ type Client interface {
 
 type client struct {
 	compose       api.Compose
-	dockerCli     *command.DockerCli
+	docker        dockerClient.APIClient
 	removeOrphans bool
 }
 
@@ -67,6 +70,30 @@ func (c *client) List(ctx context.Context) ([]api.Stack, error) {
 	})
 }
 
+func (c *client) Prune(ctx context.Context) {
+	f := filters.NewArgs()
+
+	if _, err := c.docker.ContainersPrune(ctx, f); err != nil {
+		slog.Warn("Failed to prune containers", "error", err)
+	}
+
+	if _, err := c.docker.ImagesPrune(ctx, f); err != nil {
+		slog.Warn("Failed to prune images", "error", err)
+	}
+
+	if _, err := c.docker.VolumesPrune(ctx, filters.NewArgs(filters.Arg("all", "1"))); err != nil {
+		slog.Warn("Failed to prune volumes", "error", err)
+	}
+
+	if _, err := c.docker.NetworksPrune(ctx, f); err != nil {
+		slog.Warn("Failed to prune networks", "error", err)
+	}
+
+	if _, err := c.docker.BuildCachePrune(ctx, build.CachePruneOptions{All: true}); err != nil {
+		slog.Warn("Failed to prune build cache", "error", err)
+	}
+}
+
 func (c *client) Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error) {
 	return c.compose.Ps(ctx, projectName, api.PsOptions{
 		All: true,
@@ -99,11 +126,11 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 }
 
 func (c *client) Version(ctx context.Context) ([]any, error) {
-	serverVersion, err := c.dockerCli.Client().ServerVersion(ctx)
+	serverVersion, err := c.docker.ServerVersion(ctx)
 	if err != nil {
 		return []any{}, err
 	}
-	clientVersion := c.dockerCli.Client().ClientVersion()
+	clientVersion := c.docker.ClientVersion()
 
 	return []any{
 		"server_engine", serverVersion.Version,
@@ -137,7 +164,7 @@ func New(cfg Config) (Client, error) {
 
 	return &client{
 		compose:       service,
-		dockerCli:     dockerCLI,
+		docker:        dockerCLI.Client(),
 		removeOrphans: cfg.RemoveOrphans,
 	}, nil
 }
