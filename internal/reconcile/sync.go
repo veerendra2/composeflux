@@ -147,6 +147,8 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		slog.Error("Failed to prune stacks", "error", err)
 	}
 
+	r.dClient.Prune(ctx)
+
 	slog.Debug("Clearing cache")
 	r.CacheClear()
 

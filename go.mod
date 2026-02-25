@@ -12,6 +12,7 @@ require (
 	github.com/bitwarden/sdk-go/v2 v2.0.0
 	github.com/compose-spec/compose-go/v2 v2.10.1
 	github.com/containerd/containerd/v2 v2.2.1
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/infisical/go-sdk v0.6.8
 	github.com/sirupsen/logrus v1.9.4
@@ -63,7 +64,6 @@ require (
 	github.com/docker/buildx v0.30.1 // indirect
 	github.com/docker/cli-docs-tool v0.11.0 // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
-	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/docker/go v1.5.1-1.0.20160303222718-d30aec9fd63c // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
