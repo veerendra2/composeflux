@@ -42,11 +42,6 @@ jobs:
           restore-keys: |
             mkdocs-material-
 
-      # - name: Sync README to docs index
-      #   run: |
-      #     cp README.md docs/index.md
-      #     sed -i 's|./docs/assets/composeflux-banner.png|./assets/composeflux-banner.png|g' docs/index.md
-
       - name: Install mkdocs-material
         run: pip install mkdocs-material
 

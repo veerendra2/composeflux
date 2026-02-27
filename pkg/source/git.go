@@ -15,7 +15,6 @@ import (
 const (
 	SSHUser    = "git"
 	RemoteName = "origin"
-	Branch     = "main"
 )
 
 type Config struct {
@@ -23,6 +22,7 @@ type Config struct {
 	SSHKeyPath         string `name:"ssh-key-path" help:"Path to SSH private key" env:"GIT_SSH_KEY_PATH" default:"/.ssh/composeflux_id_rsa"`
 	DeployKeySecretRef string `name:"deploy-key-secret-ref" help:"Deploy key secret reference (name or ID) to fetch from secrets manager (leave empty to use existing key at ssh-key-path)" env:"GIT_DEPLOY_KEY_SECRET_REF" default:"SSH_PRIVATE_KEY" group:"Git Source Options:"`
 	ClonePath          string `name:"clone-path" help:"Local directory for git clone" env:"GIT_CLONE_PATH" default:"/opt/compose-stack"`
+	Branch             string `name:"branch" help:"Git branch to track" env:"GIT_BRANCH" default:"main" group:"Git Source Options:"`
 }
 
 type Client interface {
@@ -45,8 +45,9 @@ func (c *client) Pull(ctx context.Context) error {
 		return err
 	}
 	err = w.PullContext(ctx, &git.PullOptions{
-		RemoteName: RemoteName,
-		Auth:       c.sshAuth,
+		RemoteName:    RemoteName,
+		Auth:          c.sshAuth,
+		ReferenceName: plumbing.NewBranchReferenceName(c.branch),
 	})
 
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
@@ -109,10 +110,11 @@ func New(cfg Config) (Client, error) {
 	repo, err := git.PlainOpen(cfg.ClonePath)
 	if err != nil {
 		if errors.Is(err, git.ErrRepositoryNotExists) {
-			slog.Info("Cloning repository", "url", cfg.RepoURL, "path", cfg.ClonePath)
+			slog.Info("Cloning repository", "url", cfg.RepoURL, "path", cfg.ClonePath, "branch", cfg.Branch)
 			repo, err = git.PlainClone(cfg.ClonePath, false, &git.CloneOptions{
-				URL:  cfg.RepoURL,
-				Auth: sshAuth,
+				URL:           cfg.RepoURL,
+				Auth:          sshAuth,
+				ReferenceName: plumbing.NewBranchReferenceName(cfg.Branch),
 			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to clone: %w", err)
@@ -120,11 +122,25 @@ func New(cfg Config) (Client, error) {
 		} else {
 			return nil, fmt.Errorf("failed to open repository: %w", err)
 		}
+	} else {
+		branchRef := plumbing.NewBranchReferenceName(cfg.Branch)
+		remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, cfg.Branch), true)
+		if err != nil {
+			return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
+		}
+		w, err := repo.Worktree()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get worktree: %w", err)
+		}
+		if err := w.Checkout(&git.CheckoutOptions{Branch: branchRef, Hash: remoteRef.Hash(), Create: true}); err != nil && !errors.Is(err, git.ErrBranchExists) {
+			return nil, fmt.Errorf("failed to checkout branch %q: %w", cfg.Branch, err)
+		}
+		slog.Info("Opened Git repository", "path", cfg.ClonePath, "branch", cfg.Branch)
 	}
 
 	return &client{
 		repo:    repo,
-		branch:  Branch,
+		branch:  cfg.Branch,
 		path:    cfg.ClonePath,
 		sshAuth: sshAuth,
 	}, nil
