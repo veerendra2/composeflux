@@ -1,6 +1,4 @@
 ---
-name: Docker Build & Push
-
 on:
   workflow_call:
     inputs:

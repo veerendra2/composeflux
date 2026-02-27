@@ -4,6 +4,13 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/docker-build-push.yml"
 
 jobs:
   golangci-lint:
