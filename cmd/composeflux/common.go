@@ -94,7 +94,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 
 	// Create git client
-	slog.Info("Git repository", "path", c.Source.ClonePath, "branch", c.Source.ClonePath)
+	slog.Info("Git repository", "path", c.Source.ClonePath, "branch", c.Source.Branch)
 	gClient, err := source.New(c.Source)
 	if err != nil {
 		slog.Error("Failed to create git client", "error", err)

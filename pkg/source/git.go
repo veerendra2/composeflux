@@ -131,18 +131,23 @@ func New(cfg Config) (Client, error) {
 		}
 	} else {
 		branchRef := plumbing.NewBranchReferenceName(cfg.Branch)
-		remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, cfg.Branch), true)
-		if err != nil {
-			return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
-		}
-
 		w, err := repo.Worktree()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get worktree: %w", err)
 		}
 
-		err = w.Checkout(&git.CheckoutOptions{Branch: branchRef, Hash: remoteRef.Hash(), Create: true})
-		if err != nil && !errors.Is(err, git.ErrBranchExists) {
+		opts := &git.CheckoutOptions{Branch: branchRef}
+		if _, err := repo.Reference(branchRef, false); err != nil {
+			// Local branch doesn't exist yet — create it from remote tracking ref
+			remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, cfg.Branch), true)
+			if err != nil {
+				return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
+			}
+			opts.Hash = remoteRef.Hash()
+			opts.Create = true
+		}
+
+		if err := w.Checkout(opts); err != nil {
 			return nil, fmt.Errorf("failed to checkout branch %q: %w", cfg.Branch, err)
 		}
 	}
