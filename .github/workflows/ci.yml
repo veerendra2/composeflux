@@ -36,4 +36,4 @@ jobs:
       packages: write
     with:
       push: true
-      tags: ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
+      tags: ghcr.io/${{ github.repository }}:dev

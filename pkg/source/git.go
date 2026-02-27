@@ -40,21 +40,28 @@ type client struct {
 
 // Pull syncs latest changes from remote
 func (c *client) Pull(ctx context.Context) error {
+	err := c.repo.FetchContext(ctx, &git.FetchOptions{
+		RemoteName: RemoteName,
+		Auth:       c.sshAuth,
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return fmt.Errorf("failed to fetch: %w", err)
+	}
+
+	// Hard reset to remote tracking ref — handles force-push and cases where
+	// HasUpdates() already fetched (making PullContext return NoErrAlreadyUpToDate early
+	// without actually updating the worktree)
+	remoteRef, err := c.repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, c.branch), true)
+	if err != nil {
+		return fmt.Errorf("failed to resolve remote ref: %w", err)
+	}
+
 	w, err := c.repo.Worktree()
 	if err != nil {
 		return err
 	}
-	err = w.PullContext(ctx, &git.PullOptions{
-		RemoteName:    RemoteName,
-		Auth:          c.sshAuth,
-		ReferenceName: plumbing.NewBranchReferenceName(c.branch),
-	})
 
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return err
-	}
-
-	return nil
+	return w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset})
 }
 
 // HasUpdates checks for remote changes and returns update status with commit SHAs
@@ -128,14 +135,16 @@ func New(cfg Config) (Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
 		}
+
 		w, err := repo.Worktree()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get worktree: %w", err)
 		}
-		if err := w.Checkout(&git.CheckoutOptions{Branch: branchRef, Hash: remoteRef.Hash(), Create: true}); err != nil && !errors.Is(err, git.ErrBranchExists) {
+
+		err = w.Checkout(&git.CheckoutOptions{Branch: branchRef, Hash: remoteRef.Hash(), Create: true})
+		if err != nil && !errors.Is(err, git.ErrBranchExists) {
 			return nil, fmt.Errorf("failed to checkout branch %q: %w", cfg.Branch, err)
 		}
-		slog.Info("Opened Git repository", "path", cfg.ClonePath, "branch", cfg.Branch)
 	}
 
 	return &client{

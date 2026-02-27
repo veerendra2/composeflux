@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   deploy:
+    name: Deploy Github Pages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
