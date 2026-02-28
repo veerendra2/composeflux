@@ -1,5 +1,5 @@
 ---
-name: Deploy Github Pages
+name: Deploy GitHub Pages
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy Github Pages
+    name: Deploy GitHub Pages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source

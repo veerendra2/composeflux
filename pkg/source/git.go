@@ -144,7 +144,7 @@ func New(cfg Config) (Client, error) {
 		opts := &git.CheckoutOptions{Branch: branchRef}
 		if _, err := repo.Reference(branchRef, false); err != nil {
 			// Local branch doesn't exist yet — fetch and create it from remote tracking ref
-			if err := repo.Fetch(&git.FetchOptions{Auth: sshAuth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			if err := repo.Fetch(&git.FetchOptions{RemoteName: RemoteName, Auth: sshAuth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 				return nil, fmt.Errorf("failed to fetch: %w", err)
 			}
 			remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, cfg.Branch), true)
