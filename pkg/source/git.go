@@ -43,6 +43,7 @@ func (c *client) Pull(ctx context.Context) error {
 	err := c.repo.FetchContext(ctx, &git.FetchOptions{
 		RemoteName: RemoteName,
 		Auth:       c.sshAuth,
+		Force:      true, // required for force-pushed branches to update remote tracking refs
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to fetch: %w", err)
@@ -61,7 +62,10 @@ func (c *client) Pull(ctx context.Context) error {
 		return err
 	}
 
-	return w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset})
+	if err := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset}); err != nil {
+		return fmt.Errorf("failed to reset to %s/%s: %w", RemoteName, c.branch, err)
+	}
+	return nil
 }
 
 // HasUpdates checks for remote changes and returns update status with commit SHAs
@@ -77,6 +81,7 @@ func (c *client) HasUpdates(ctx context.Context) (bool, string, string, error) {
 	err = c.repo.FetchContext(ctx, &git.FetchOptions{
 		RemoteName: RemoteName,
 		Auth:       c.sshAuth,
+		Force:      true,
 	})
 
 	if errors.Is(err, git.NoErrAlreadyUpToDate) {
@@ -138,7 +143,10 @@ func New(cfg Config) (Client, error) {
 
 		opts := &git.CheckoutOptions{Branch: branchRef}
 		if _, err := repo.Reference(branchRef, false); err != nil {
-			// Local branch doesn't exist yet — create it from remote tracking ref
+			// Local branch doesn't exist yet — fetch and create it from remote tracking ref
+			if err := repo.Fetch(&git.FetchOptions{Auth: sshAuth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return nil, fmt.Errorf("failed to fetch: %w", err)
+			}
 			remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, cfg.Branch), true)
 			if err != nil {
 				return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
