@@ -3,6 +3,14 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/docker-build-push.yml"
 
 jobs:
   golangci-lint:
@@ -24,3 +32,15 @@ jobs:
           version: latest
           working-directory: ./
           args: --timeout 5m
+
+  docker-build:
+    name: Build & Push Dev Image
+    if: contains(github.event.pull_request.labels.*.name, 'build')
+    needs: golangci-lint
+    uses: ./.github/workflows/docker-build-push.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      push: true
+      tags: ghcr.io/${{ github.repository }}:dev

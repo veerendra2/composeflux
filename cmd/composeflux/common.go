@@ -62,15 +62,6 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 		sClient.Close()
 	}
 
-	// Backward-compatible fallback for deprecated GIT_SSH_KEY_NAME
-	if c.Source.DeployKeySecretRef == "" {
-		if _, ok := os.LookupEnv("GIT_DEPLOY_KEY_SECRET_REF"); !ok {
-			if v, ok := os.LookupEnv("GIT_SSH_KEY_NAME"); ok && v != "" {
-				c.Source.DeployKeySecretRef = v
-			}
-		}
-	}
-
 	// Fetch SSH deploy key from secrets manager if specified
 	if c.Source.DeployKeySecretRef != "" {
 		slog.Debug("Fetching SSH deploy key from secrets manager", "deploy_key_ref", c.Source.DeployKeySecretRef)
@@ -103,6 +94,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 
 	// Create git client
+	slog.Info("Git repository", "path", c.Source.ClonePath, "branch", c.Source.Branch)
 	gClient, err := source.New(c.Source)
 	if err != nil {
 		slog.Error("Failed to create git client", "error", err)
