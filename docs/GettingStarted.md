@@ -48,6 +48,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `GIT_SSH_KEY_PATH`          | SSH key path inside container                                                                                                 | `/.ssh/composeflux_id_rsa` |
 | `GIT_CLONE_PATH`            | Local clone directory                                                                                                         | `/opt/compose-stack`       |
 | `GIT_INTERVAL`              | Git sync interval                                                                                                             | `5m`                       |
+| `GIT_BRANCH`                | Git branch to track                                                                                                           | `main`                     |
 | `CONFIG_FILE`               | Stack config file name (see [Stack Configuration](Introduction.md#stack-configuration))                                       | `stack.yml`                |
 | `LOG_LEVEL`                 | Log level (`debug`/`info`/`warn`/`error`)                                                                                     | `info`                     |
 | `LOG_FORMAT`                | Log format (`console`/`json`)                                                                                                 | `console`                  |
@@ -139,6 +140,7 @@ services:
       GIT_REPO_URL: ${GIT_REPO_URL}
       STACK_PATH: ${STACK_PATH}
       # GIT_INTERVAL: 5m              # Sync interval
+      # GIT_BRANCH: main
 
       # Secrets Manager - Bitwarden
       SECRETS_PROVIDER: ${SECRETS_PROVIDER}
