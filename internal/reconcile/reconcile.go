@@ -20,7 +20,8 @@ type Reconciler struct {
 	configFile string
 	stackPath  string
 
-	gitInterval time.Duration
+	gitInterval         time.Duration
+	imageUpdateSchedule string
 
 	dClient dockercompose.Client
 	gClient source.Client
@@ -35,7 +36,8 @@ func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dock
 		configFile: cfg.ConfigFile,
 		stackPath:  cfg.StackPath,
 
-		gitInterval: cfg.Timers.GitInterval,
+		gitInterval:         cfg.Timers.GitInterval,
+		imageUpdateSchedule: cfg.Timers.ImageUpdateSchedule,
 
 		dClient: dClient,
 		gClient: gClient,

@@ -4,16 +4,20 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/compose-spec/compose-go/v2/types"
+	"github.com/distribution/reference"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
 	"github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/api/types/filters"
+	dockerregistrytypes "github.com/docker/docker/api/types/registry"
 	dockerClient "github.com/docker/docker/client"
+	dockerregistry "github.com/docker/docker/registry"
 	"github.com/sirupsen/logrus"
 )
 
@@ -24,6 +28,7 @@ type Client interface {
 	LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error)
 
 	Down(ctx context.Context, projectName string) error
+	HasImageUpdates(ctx context.Context, project *types.Project) (bool, error)
 	List(ctx context.Context) ([]api.Stack, error)
 	Prune(ctx context.Context)
 	Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error)
@@ -36,6 +41,7 @@ type Client interface {
 type client struct {
 	compose       api.Compose
 	docker        dockerClient.APIClient
+	dockerCLI     *command.DockerCli
 	removeOrphans bool
 }
 
@@ -125,6 +131,67 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 	})
 }
 
+// HasImageUpdates checks if any service image in the project has a newer version in the registry.
+func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (bool, error) {
+	for _, svc := range project.Services {
+		if svc.Build != nil || svc.Image == "" || strings.Contains(svc.Image, "@sha256:") {
+			continue
+		}
+
+		localInfo, err := c.docker.ImageInspect(ctx, svc.Image)
+		if err != nil {
+			// Image not present locally — treat as needs update; compose up will pull it
+			slog.Debug("Image not found locally, treating as update needed", "image", svc.Image)
+			return true, nil
+		}
+
+		if len(localInfo.RepoDigests) == 0 {
+			// No repo digests means the image was built or loaded locally — skip
+			continue
+		}
+
+		// Build auth token from docker config for private registry support
+		encodedAuth := ""
+		named, parseErr := reference.ParseNormalizedNamed(svc.Image)
+		if parseErr == nil {
+			if repoInfo, repoErr := dockerregistry.ParseRepositoryInfo(named); repoErr == nil {
+				cliAuth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
+				dockerAuth := dockerregistrytypes.AuthConfig{
+					Username:      cliAuth.Username,
+					Password:      cliAuth.Password,
+					Auth:          cliAuth.Auth,
+					IdentityToken: cliAuth.IdentityToken,
+					RegistryToken: cliAuth.RegistryToken,
+					ServerAddress: cliAuth.ServerAddress,
+				}
+				encodedAuth, _ = dockerregistrytypes.EncodeAuthConfig(dockerAuth)
+			}
+		}
+
+		remoteDist, err := c.docker.DistributionInspect(ctx, svc.Image, encodedAuth)
+		if err != nil {
+			slog.Warn("Failed to fetch remote manifest, skipping service", "image", svc.Image, "error", err)
+			continue
+		}
+
+		remoteDigest := remoteDist.Descriptor.Digest.String()
+		hasMatch := false
+		for _, localDigest := range localInfo.RepoDigests {
+			if strings.Contains(localDigest, remoteDigest) {
+				hasMatch = true
+				break
+			}
+		}
+
+		if !hasMatch {
+			slog.Debug("Image update detected", "image", svc.Image,
+				"local_digests", localInfo.RepoDigests, "remote_digest", remoteDigest)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (c *client) Version(ctx context.Context) ([]any, error) {
 	serverVersion, err := c.docker.ServerVersion(ctx)
 	if err != nil {
@@ -165,6 +232,7 @@ func New(cfg Config) (Client, error) {
 	return &client{
 		compose:       service,
 		docker:        dockerCLI.Client(),
+		dockerCLI:     dockerCLI,
 		removeOrphans: cfg.RemoveOrphans,
 	}, nil
 }
