@@ -2,6 +2,8 @@ package dockercompose
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"strings"
@@ -13,11 +15,8 @@ import (
 	"github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
-	"github.com/docker/docker/api/types/build"
-	"github.com/docker/docker/api/types/filters"
-	dockerregistrytypes "github.com/docker/docker/api/types/registry"
-	dockerClient "github.com/docker/docker/client"
 	dockerregistry "github.com/docker/docker/registry"
+	mobyClient "github.com/moby/moby/client"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,7 +39,7 @@ type Client interface {
 
 type client struct {
 	compose       api.Compose
-	docker        dockerClient.APIClient
+	docker        mobyClient.APIClient
 	dockerCLI     *command.DockerCli
 	removeOrphans bool
 }
@@ -77,25 +76,25 @@ func (c *client) List(ctx context.Context) ([]api.Stack, error) {
 }
 
 func (c *client) Prune(ctx context.Context) {
-	f := filters.NewArgs()
+	f := mobyClient.Filters{}
 
-	if _, err := c.docker.ContainersPrune(ctx, f); err != nil {
+	if _, err := c.docker.ContainerPrune(ctx, mobyClient.ContainerPruneOptions{Filters: f}); err != nil {
 		slog.Warn("Failed to prune containers", "error", err)
 	}
 
-	if _, err := c.docker.ImagesPrune(ctx, f); err != nil {
+	if _, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{Filters: f}); err != nil {
 		slog.Warn("Failed to prune images", "error", err)
 	}
 
-	if _, err := c.docker.VolumesPrune(ctx, filters.NewArgs(filters.Arg("all", "1"))); err != nil {
+	if _, err := c.docker.VolumePrune(ctx, mobyClient.VolumePruneOptions{All: true}); err != nil {
 		slog.Warn("Failed to prune volumes", "error", err)
 	}
 
-	if _, err := c.docker.NetworksPrune(ctx, f); err != nil {
+	if _, err := c.docker.NetworkPrune(ctx, mobyClient.NetworkPruneOptions{Filters: f}); err != nil {
 		slog.Warn("Failed to prune networks", "error", err)
 	}
 
-	if _, err := c.docker.BuildCachePrune(ctx, build.CachePruneOptions{All: true}); err != nil {
+	if _, err := c.docker.BuildCachePrune(ctx, mobyClient.BuildCachePruneOptions{All: true}); err != nil {
 		slog.Warn("Failed to prune build cache", "error", err)
 	}
 }
@@ -156,7 +155,14 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		if parseErr == nil {
 			if repoInfo, repoErr := dockerregistry.ParseRepositoryInfo(named); repoErr == nil {
 				cliAuth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
-				dockerAuth := dockerregistrytypes.AuthConfig{
+				dockerAuth := struct {
+					Username      string `json:"username,omitempty"`
+					Password      string `json:"password,omitempty"`
+					Auth          string `json:"auth,omitempty"`
+					ServerAddress string `json:"serveraddress,omitempty"`
+					IdentityToken string `json:"identitytoken,omitempty"`
+					RegistryToken string `json:"registrytoken,omitempty"`
+				}{
 					Username:      cliAuth.Username,
 					Password:      cliAuth.Password,
 					Auth:          cliAuth.Auth,
@@ -164,11 +170,15 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 					RegistryToken: cliAuth.RegistryToken,
 					ServerAddress: cliAuth.ServerAddress,
 				}
-				encodedAuth, _ = dockerregistrytypes.EncodeAuthConfig(dockerAuth)
+				if buf, err := json.Marshal(dockerAuth); err == nil {
+					encodedAuth = base64.URLEncoding.EncodeToString(buf)
+				}
 			}
 		}
 
-		remoteDist, err := c.docker.DistributionInspect(ctx, svc.Image, encodedAuth)
+		remoteDist, err := c.docker.DistributionInspect(ctx, svc.Image, mobyClient.DistributionInspectOptions{
+			EncodedRegistryAuth: encodedAuth,
+		})
 		if err != nil {
 			slog.Warn("Failed to fetch remote manifest, skipping service", "image", svc.Image, "error", err)
 			continue
@@ -193,7 +203,7 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 }
 
 func (c *client) Version(ctx context.Context) ([]any, error) {
-	serverVersion, err := c.docker.ServerVersion(ctx)
+	serverVersion, err := c.docker.ServerVersion(ctx, mobyClient.ServerVersionOptions{})
 	if err != nil {
 		return []any{}, err
 	}

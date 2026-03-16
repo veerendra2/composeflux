@@ -13,11 +13,16 @@ import (
 )
 
 // SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
-func (r *Reconciler) SyncImages(ctx context.Context) {
+func (r *Reconciler) SyncImages(ctx context.Context) error {
+	// Load secrets into cache
+	if err := r.CacheLoadSecrets(); err != nil {
+		return err
+	}
+
 	composeCfgs, err := r.discoverComposeStack()
 	if err != nil {
 		slog.Error("Failed to discover compose stacks for image update check", "error", err)
-		return
+		return err
 	}
 
 	for _, composeCfg := range composeCfgs {
@@ -47,6 +52,12 @@ func (r *Reconciler) SyncImages(ctx context.Context) {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
 		}
 	}
+
+	r.dClient.Prune(ctx)
+	slog.Debug("Clearing cache")
+	r.CacheClear()
+
+	return nil
 }
 
 // Sync pulls changes from Git repo and deploys stacks which are changed and new
