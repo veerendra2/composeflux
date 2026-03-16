@@ -1,6 +1,6 @@
 module github.com/veerendra2/composeflux
 
-go 1.26.0
+go 1.26.1
 
 require (
 	github.com/docker/cli v29.2.1+incompatible
