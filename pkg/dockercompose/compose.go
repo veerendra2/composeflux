@@ -12,6 +12,7 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/distribution/reference"
 	"github.com/docker/cli/cli/command"
+	dockerconfigtypes "github.com/docker/cli/cli/config/types"
 	"github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
@@ -140,7 +141,8 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		localInfo, err := c.docker.ImageInspect(ctx, svc.Image)
 		if err != nil {
 			// Image not present locally — treat as needs update; compose up will pull it
-			slog.Debug("Image not found locally, treating as update needed", "image", svc.Image)
+			slog.Debug("Image not found locally, treating as update needed",
+				"stack", project.Name, "service", svc.Name, "image", svc.Image)
 			return true, nil
 		}
 
@@ -155,22 +157,7 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		if parseErr == nil {
 			if repoInfo, repoErr := dockerregistry.ParseRepositoryInfo(named); repoErr == nil {
 				cliAuth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
-				dockerAuth := struct {
-					Username      string `json:"username,omitempty"`
-					Password      string `json:"password,omitempty"`
-					Auth          string `json:"auth,omitempty"`
-					ServerAddress string `json:"serveraddress,omitempty"`
-					IdentityToken string `json:"identitytoken,omitempty"`
-					RegistryToken string `json:"registrytoken,omitempty"`
-				}{
-					Username:      cliAuth.Username,
-					Password:      cliAuth.Password,
-					Auth:          cliAuth.Auth,
-					IdentityToken: cliAuth.IdentityToken,
-					RegistryToken: cliAuth.RegistryToken,
-					ServerAddress: cliAuth.ServerAddress,
-				}
-				if buf, err := json.Marshal(dockerAuth); err == nil {
+				if buf, err := json.Marshal(dockerconfigtypes.AuthConfig(cliAuth)); err == nil {
 					encodedAuth = base64.URLEncoding.EncodeToString(buf)
 				}
 			}

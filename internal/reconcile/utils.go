@@ -96,6 +96,31 @@ func (r *Reconciler) discoverComposeStack() ([]dockercompose.ComposeConfig, erro
 	return stacks, nil
 }
 
+// loadCache loads secrets and env vars from the stack config into the cache.
+// Returns the parsed StackConfig (may be nil if config file is absent).
+func (r *Reconciler) loadCache() (*StackConfig, error) {
+	configPath := filepath.Join(r.gClient.Path(), r.stackPath, r.configFile)
+	var cfg *StackConfig
+
+	if _, err := os.Stat(configPath); err == nil {
+		cfg, err = Load(configPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := r.CacheLoadSecrets(); err != nil {
+		return nil, err
+	}
+
+	if cfg != nil && len(cfg.Envs) > 0 {
+		slog.Info("Adding env vars to cache", "count", len(cfg.Envs))
+		r.CacheSet(cfg.Envs)
+	}
+
+	return cfg, nil
+}
+
 // getStackStates return StackStateMap which contains the stack hash
 func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) {
 	stackStateMap := make(StackStateMap)

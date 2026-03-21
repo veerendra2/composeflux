@@ -30,20 +30,20 @@ func (r *Reconciler) Run(ctx context.Context) {
 		if _, err := c.AddFunc(r.imageUpdateSchedule, func() {
 			imageCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 			defer cancel()
-			slog.Debug("Running image update check", "schedule", r.imageUpdateSchedule)
+			slog.Debug("Running image update check", "cron", r.imageUpdateSchedule)
 			if err := r.SyncImages(imageCtx); err != nil {
 				slog.Error("Failed to sync image updates", "error", err)
 			}
 		}); err != nil {
-			slog.Error("Invalid image update cron schedule, image updates disabled", "schedule", r.imageUpdateSchedule, "error", err)
+			slog.Error("Invalid image update cron schedule, image updates disabled", "cron", r.imageUpdateSchedule, "error", err)
 		} else {
 			c.Start()
 			defer c.Stop()
-			slog.Debug("Image update checks scheduled", "schedule", r.imageUpdateSchedule)
+			slog.Debug("Image update checks scheduled", "cron", r.imageUpdateSchedule)
 		}
 	}
 
-	slog.Info("Starting reconciliation loop", "git_poll_interval", r.gitInterval)
+	slog.Info("Starting reconciliation", "git_poll_interval", r.gitInterval)
 
 	for {
 		select {

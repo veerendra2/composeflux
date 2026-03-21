@@ -14,8 +14,9 @@ import (
 
 // SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
 func (r *Reconciler) SyncImages(ctx context.Context) error {
-	// Load secrets into cache
-	if err := r.CacheLoadSecrets(); err != nil {
+	defer r.CacheClear()
+
+	if _, err := r.loadCache(); err != nil {
 		return err
 	}
 
@@ -54,56 +55,36 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 	}
 
 	r.dClient.Prune(ctx)
-	slog.Debug("Clearing cache")
-	r.CacheClear()
 
 	return nil
 }
 
 // Sync pulls changes from Git repo and deploys stacks which are changed and new
 func (r *Reconciler) Sync(ctx context.Context) error {
+	defer r.CacheClear()
+
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
 	}
 
-	// Read stack config file in the Git repo
-	configPath := filepath.Join(r.gClient.Path(), r.stackPath, r.configFile)
-	var cfg *StackConfig
-
-	if _, err := os.Stat(configPath); err == nil {
-		slog.Debug("Found stack config", "path", configPath)
-		cfg, err = Load(configPath)
-		if err != nil {
-			return err
-		}
-
-		// Validate StartupOrder directories exist
-		if cfg != nil && len(cfg.StartupOrder) > 0 {
-			for _, stackName := range cfg.StartupOrder {
-				startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
-
-				if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
-					slog.Warn("Stack directory in startup_order not found",
-						"startup_order_item", stackName,
-						"expected_path", startupItemDir)
-				}
-			}
-		}
-	} else {
-		slog.Warn("Stack config not found in the Git repo", "path", configPath)
-		slog.Warn("Continuing stacks deployment without stack config")
-	}
-
-	// Load secrets into cache
-	if err := r.CacheLoadSecrets(); err != nil {
+	cfg, err := r.loadCache()
+	if err != nil {
 		return err
 	}
 
-	// Add environmental variables from stack config to cache
-	if cfg != nil {
-		if len(cfg.Envs) > 0 {
-			slog.Info("Adding env vars to cache", "count", len(cfg.Envs))
-			r.CacheSet(cfg.Envs)
+	if cfg == nil {
+		slog.Warn("Stack config not found in the Git repo, continuing without it")
+	}
+
+	// Validate StartupOrder directories exist
+	if cfg != nil && len(cfg.StartupOrder) > 0 {
+		for _, stackName := range cfg.StartupOrder {
+			startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+			if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
+				slog.Warn("Stack directory in startup_order not found",
+					"startup_order_item", stackName,
+					"expected_path", startupItemDir)
+			}
 		}
 	}
 
@@ -196,9 +177,6 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	r.dClient.Prune(ctx)
-
-	slog.Debug("Clearing cache")
-	r.CacheClear()
 
 	return nil
 }
