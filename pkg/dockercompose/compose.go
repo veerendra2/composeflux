@@ -181,7 +181,8 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		}
 
 		if !hasMatch {
-			slog.Debug("Image update detected", "image", svc.Image,
+			slog.Info("Image update available", "stack", project.Name, "service", svc.Name, "image", svc.Image)
+			slog.Debug("Image digest mismatch", "image", svc.Image,
 				"local_digests", localInfo.RepoDigests, "remote_digest", remoteDigest)
 			return true, nil
 		}

@@ -48,7 +48,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("Shutdown signal received, reconciliation loop stopped")
+			slog.Info("Shutdown signal received, reconciliation stopped")
 			return
 
 		case <-gitTicker.C:

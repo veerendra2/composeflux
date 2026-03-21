@@ -14,11 +14,10 @@ import (
 
 // SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
 func (r *Reconciler) SyncImages(ctx context.Context) error {
-	defer r.CacheClear()
-
 	if _, err := r.loadCache(); err != nil {
 		return err
 	}
+	defer r.CacheClear()
 
 	composeCfgs, err := r.discoverComposeStack()
 	if err != nil {
@@ -44,14 +43,15 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 			continue
 		}
 
-		slog.Info("Image update detected, pulling and redeploying stack", "stack_name", project.Name)
 		if err := r.dClient.Pull(ctx, project); err != nil {
 			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
 			continue
 		}
 		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
+			continue
 		}
+		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
 	}
 
 	r.dClient.Prune(ctx)
@@ -61,8 +61,6 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 
 // Sync pulls changes from Git repo and deploys stacks which are changed and new
 func (r *Reconciler) Sync(ctx context.Context) error {
-	defer r.CacheClear()
-
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
 	}
@@ -71,6 +69,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer r.CacheClear()
 
 	if cfg == nil {
 		slog.Warn("Stack config not found in the Git repo, continuing without it")

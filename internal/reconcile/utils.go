@@ -114,7 +114,7 @@ func (r *Reconciler) loadCache() (*StackConfig, error) {
 	}
 
 	if cfg != nil && len(cfg.Envs) > 0 {
-		slog.Info("Adding env vars to cache", "count", len(cfg.Envs))
+		slog.Debug("Adding env vars to cache", "count", len(cfg.Envs))
 		r.CacheSet(cfg.Envs)
 	}
 
