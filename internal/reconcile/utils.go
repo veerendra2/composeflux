@@ -107,6 +107,8 @@ func (r *Reconciler) loadCache() (*StackConfig, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to stat stack config %s: %w", configPath, err)
 	}
 
 	if err := r.CacheLoadSecrets(); err != nil {

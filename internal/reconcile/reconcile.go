@@ -29,6 +29,8 @@ type Reconciler struct {
 
 	cache   []string
 	cacheMu sync.RWMutex
+
+	reconcileMu sync.Mutex
 }
 
 func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dockercompose.Client) (*Reconciler, error) {

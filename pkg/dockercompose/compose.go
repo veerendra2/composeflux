@@ -140,6 +140,11 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 
 		localInfo, err := c.docker.ImageInspect(ctx, svc.Image)
 		if err != nil {
+			type notFound interface{ NotFound() }
+			if _, ok := err.(notFound); !ok {
+				slog.Warn("Failed to inspect image, skipping", "stack", project.Name, "service", svc.Name, "image", svc.Image, "error", err)
+				continue
+			}
 			// Image not present locally — treat as needs update; compose up will pull it
 			slog.Debug("Image not found locally, treating as update needed",
 				"stack", project.Name, "service", svc.Name, "image", svc.Image)
@@ -174,7 +179,9 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		remoteDigest := remoteDist.Descriptor.Digest.String()
 		hasMatch := false
 		for _, localDigest := range localInfo.RepoDigests {
-			if strings.Contains(localDigest, remoteDigest) {
+			// localDigest format: "name@sha256:abc…" — compare only the digest part
+			parts := strings.SplitN(localDigest, "@", 2)
+			if len(parts) == 2 && parts[1] == remoteDigest {
 				hasMatch = true
 				break
 			}

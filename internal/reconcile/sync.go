@@ -14,10 +14,13 @@ import (
 
 // SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
 func (r *Reconciler) SyncImages(ctx context.Context) error {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+	defer r.CacheClear()
+
 	if _, err := r.loadCache(); err != nil {
 		return err
 	}
-	defer r.CacheClear()
 
 	composeCfgs, err := r.discoverComposeStack()
 	if err != nil {
@@ -61,6 +64,10 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 
 // Sync pulls changes from Git repo and deploys stacks which are changed and new
 func (r *Reconciler) Sync(ctx context.Context) error {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+	defer r.CacheClear()
+
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
 	}
@@ -69,7 +76,6 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer r.CacheClear()
 
 	if cfg == nil {
 		slog.Warn("Stack config not found in the Git repo, continuing without it")
