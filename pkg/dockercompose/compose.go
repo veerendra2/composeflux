@@ -134,8 +134,16 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 // HasImageUpdates checks if any service image in the project has a newer version in the registry.
 func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (bool, error) {
 	for _, svc := range project.Services {
-		if svc.Build != nil || svc.Image == "" || strings.Contains(svc.Image, "@sha256:") {
+		if svc.Build != nil || svc.Image == "" {
 			continue
+		}
+
+		// Skip digest-pinned images (e.g. image@sha256:abc…) — they are immutable
+		named, parseErr := reference.ParseNormalizedNamed(svc.Image)
+		if parseErr == nil {
+			if _, isDigested := named.(reference.Digested); isDigested {
+				continue
+			}
 		}
 
 		localInfo, err := c.docker.ImageInspect(ctx, svc.Image)
@@ -158,7 +166,6 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 
 		// Build auth token from docker config for private registry support
 		encodedAuth := ""
-		named, parseErr := reference.ParseNormalizedNamed(svc.Image)
 		if parseErr == nil {
 			if repoInfo, repoErr := dockerregistry.ParseRepositoryInfo(named); repoErr == nil {
 				cliAuth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
