@@ -2,6 +2,8 @@
 
 # ComposeFlux
 
+> :warning: _Currently in beta_
+
 _A GitOps continuous deployment tool for Docker Compose_
 
 ![ComposeFlux](./docs/assets/composeflux-banner.png)
