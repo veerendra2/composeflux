@@ -18,6 +18,7 @@ ComposeFlux automates Docker Compose deployments using GitOps principles. Monito
 - **Smart Change Detection** - Hash-based detection deploys only changed stacks
 - **Pure Go Implementation** - Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/) without shell execution
 - **Secrets Management** - Integrated Bitwarden Secrets Manager and Infisical support
+- **Automatic Image Updates** - Scheduled registry checks redeploy stacks when newer images are available
 - **Flexible Configuration** - Startup order and shared environment variables
 - **Simple & Headless** - No UI, no backend database
 
