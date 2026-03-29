@@ -27,7 +27,7 @@ func (r *Reconciler) CacheLoadSecrets() error {
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 
-	slog.Info("Adding secrets to cache", "count", len(secrets.Secrets))
+	slog.Debug("Adding secrets to cache", "count", len(secrets.Secrets))
 	// Allocate new slice to fully release old memory and clear old secrets
 	r.cache = make([]string, 0, len(secrets.Secrets))
 	for _, secret := range secrets.Secrets {

@@ -5,10 +5,13 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 type Timers struct {
-	GitInterval time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
+	GitInterval         time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
+	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
 }
 
 func (r *Reconciler) Run(ctx context.Context) {
@@ -21,12 +24,31 @@ func (r *Reconciler) Run(ctx context.Context) {
 	gitTicker := time.NewTicker(r.gitInterval)
 	defer gitTicker.Stop()
 
-	slog.Info("Starting reconciliation loop", "git_poll_interval", r.gitInterval)
+	// Set up image update cron job if schedule is configured
+	if r.imageUpdateSchedule != "" {
+		c := cron.New()
+		if _, err := c.AddFunc(r.imageUpdateSchedule, func() {
+			imageCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			defer cancel()
+			slog.Debug("Running image update check", "cron", r.imageUpdateSchedule)
+			if err := r.SyncImages(imageCtx); err != nil {
+				slog.Error("Failed to sync image updates", "error", err)
+			}
+		}); err != nil {
+			slog.Error("Invalid image update cron schedule, image updates disabled", "cron", r.imageUpdateSchedule, "error", err)
+		} else {
+			c.Start()
+			defer c.Stop()
+			slog.Debug("Image update checks scheduled", "cron", r.imageUpdateSchedule)
+		}
+	}
+
+	slog.Info("Starting reconciliation", "git_poll_interval", r.gitInterval)
 
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("Shutdown signal received, reconciliation loop stopped")
+			slog.Info("Shutdown signal received, reconciliation stopped")
 			return
 
 		case <-gitTicker.C:

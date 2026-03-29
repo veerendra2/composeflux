@@ -12,50 +12,84 @@ import (
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
+// SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
+func (r *Reconciler) SyncImages(ctx context.Context) error {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+	defer r.CacheClear()
+
+	if _, err := r.loadCache(); err != nil {
+		return err
+	}
+
+	composeCfgs, err := r.discoverComposeStack()
+	if err != nil {
+		slog.Error("Failed to discover compose stacks for image update check", "error", err)
+		return err
+	}
+
+	for _, composeCfg := range composeCfgs {
+		project, err := r.dClient.LoadProject(ctx, composeCfg)
+		if err != nil {
+			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
+			continue
+		}
+
+		hasUpdate, err := r.dClient.HasImageUpdates(ctx, project)
+		if err != nil {
+			slog.Warn("Failed to check image updates", "stack_name", project.Name, "error", err)
+			continue
+		}
+
+		if !hasUpdate {
+			slog.Debug("All images up to date", "stack_name", project.Name)
+			continue
+		}
+
+		if err := r.dClient.Pull(ctx, project); err != nil {
+			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
+			continue
+		}
+		if err := r.Deploy(ctx, project); err != nil {
+			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
+			continue
+		}
+		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
+	}
+
+	r.dClient.Prune(ctx)
+
+	return nil
+}
+
 // Sync pulls changes from Git repo and deploys stacks which are changed and new
 func (r *Reconciler) Sync(ctx context.Context) error {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+	defer r.CacheClear()
+
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
 	}
 
-	// Read stack config file in the Git repo
-	configPath := filepath.Join(r.gClient.Path(), r.stackPath, r.configFile)
-	var cfg *StackConfig
-
-	if _, err := os.Stat(configPath); err == nil {
-		slog.Debug("Found stack config", "path", configPath)
-		cfg, err = Load(configPath)
-		if err != nil {
-			return err
-		}
-
-		// Validate StartupOrder directories exist
-		if cfg != nil && len(cfg.StartupOrder) > 0 {
-			for _, stackName := range cfg.StartupOrder {
-				startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
-
-				if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
-					slog.Warn("Stack directory in startup_order not found",
-						"startup_order_item", stackName,
-						"expected_path", startupItemDir)
-				}
-			}
-		}
-	} else {
-		slog.Warn("Stack config not found in the Git repo", "path", configPath)
-		slog.Warn("Continuing stacks deployment without stack config")
-	}
-
-	// Load secrets into cache
-	if err := r.CacheLoadSecrets(); err != nil {
+	cfg, err := r.loadCache()
+	if err != nil {
 		return err
 	}
 
-	// Add environmental variables from stack config to cache
-	if cfg != nil {
-		if len(cfg.Envs) > 0 {
-			slog.Info("Adding env vars to cache", "count", len(cfg.Envs))
-			r.CacheSet(cfg.Envs)
+	if cfg == nil {
+		slog.Warn("Stack config not found in the Git repo, continuing without it")
+	}
+
+	// Validate StartupOrder directories exist
+	if cfg != nil && len(cfg.StartupOrder) > 0 {
+		for _, stackName := range cfg.StartupOrder {
+			startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+			if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
+				slog.Warn("Stack directory in startup_order not found",
+					"startup_order_item", stackName,
+					"expected_path", startupItemDir)
+			}
 		}
 	}
 
@@ -148,9 +182,6 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	r.dClient.Prune(ctx)
-
-	slog.Debug("Clearing cache")
-	r.CacheClear()
 
 	return nil
 }

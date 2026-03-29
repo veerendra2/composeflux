@@ -2,7 +2,7 @@
 
 # ComposeFlux
 
-> _\*Currently in beta_
+> :warning: _Currently in beta_
 
 _A GitOps continuous deployment tool for Docker Compose_
 
