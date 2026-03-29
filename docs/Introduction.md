@@ -13,8 +13,9 @@ ComposeFlux is a GitOps tool for managing Docker Compose stacks on home servers.
 
 ![Arch](./assets/arch.png)
 
-ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an initial sync at startup, then checks the remote Git repository for changes and syncs again when updates are detected. Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks when a newer registry digest is detected.
+ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an initial sync at startup, then checks the remote Git repository for changes and syncs again when updates are detected.
 
+Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks when a new image digest is detected.
 1. Pulls latest commits
 2. Fetches secrets from secrets manager
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
