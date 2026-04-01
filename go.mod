@@ -3,20 +3,20 @@ module github.com/veerendra2/composeflux
 go 1.26.1
 
 require (
-	github.com/docker/cli v29.2.1+incompatible
-	github.com/docker/compose/v5 v5.1.0
+	github.com/docker/cli v29.3.1+incompatible
+	github.com/docker/compose/v5 v5.1.1
 )
 
 require (
 	github.com/alecthomas/kong v1.14.0
 	github.com/bitwarden/sdk-go/v2 v2.0.0
 	github.com/compose-spec/compose-go/v2 v2.10.1
-	github.com/containerd/containerd/v2 v2.2.1
+	github.com/containerd/containerd/v2 v2.2.2
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-git/go-git/v5 v5.17.0
-	github.com/infisical/go-sdk v0.6.8
-	github.com/moby/moby/client v0.2.2
+	github.com/infisical/go-sdk v0.6.9
+	github.com/moby/moby/client v0.3.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/veerendra2/gopackages v1.2.3
@@ -112,7 +112,7 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
-	github.com/moby/moby/api v1.53.0 // indirect
+	github.com/moby/moby/api v1.54.0 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
@@ -178,8 +178,8 @@ require (
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
