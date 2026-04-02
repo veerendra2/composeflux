@@ -32,7 +32,7 @@ ComposeFlux uses a hash-based approach to decide whether a stack needs redeployi
 - **Includes secrets**: The hash includes resolved secrets at sync time. If secrets change, you can run `composeflux sync` (or wait for the next Git change) to fetch them and update the hash.
 - To take full advantage of hash-based detection for app config changes, prefer Docker Compose [`configs`](https://docs.docker.com/reference/compose-file/configs/) in your Compose files instead of mounting plain app config files directly into containers.
 - Stack is redeployed only when the hash changes; otherwise it is skipped (no unnecessary redeployment)
-- Hash is stored in the `compose.stack.hash` label on deployed containers
+- Hash is stored in the `composeflux.stack-hash` label on deployed containers
 
 ## Stack Configuration
 

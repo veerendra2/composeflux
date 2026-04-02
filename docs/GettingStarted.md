@@ -219,7 +219,7 @@ docker compose logs -f
 docker compose logs -f
 
 # List managed stacks (should show containers with composeflux label)
-docker ps --filter "label=compose.stack.managed-by=composeflux"
+docker ps --filter "label=composeflux.managed=true"
 
 # List all compose projects
 docker compose ls
