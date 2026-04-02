@@ -9,14 +9,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/veerendra2/composeflux/pkg/dockercompose"
+	"github.com/compose-spec/compose-go/v2/types"
 )
 
 // SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
 func (r *Reconciler) SyncImages(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
-	defer r.CacheClear()
+	defer r.cacheClear()
 
 	if _, err := r.loadCache(); err != nil {
 		return err
@@ -57,7 +57,10 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
 	}
 
-	r.dClient.Prune(ctx)
+	// Prune stacks which are not in Git repo
+	if err := r.Prune(ctx, composeCfgs); err != nil {
+		slog.Error("Failed to prune stacks", "error", err)
+	}
 
 	return nil
 }
@@ -66,7 +69,7 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 func (r *Reconciler) Sync(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
-	defer r.CacheClear()
+	defer r.cacheClear()
 
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
@@ -105,9 +108,9 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		return err
 	}
 
-	// Store stack configs to deploy
-	// Map of Stack name -> Compose config
-	toDeployConfigs := make(map[string]dockercompose.ComposeConfig)
+	// Store projects to deploy
+	// Map of Stack name -> loaded Project
+	toDeploy := make(map[string]*types.Project)
 
 	// Check hash and determine which stacks are changed and deploy those
 	for _, composeCfg := range composeCfgs {
@@ -122,18 +125,18 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 			slog.Warn("Failed to get hash from the running stack, picking for deployment anyways",
 				"stack_name", project.Name, "error", err)
 			// Deploy anyway if hash calculation fails
-			toDeployConfigs[project.Name] = composeCfg
+			toDeploy[project.Name] = project
 			continue
 		}
 
 		if stackInfo, exists := currentStackMap[project.Name]; exists {
 			if stackInfo.Hash != sourceHash {
 				slog.Info("Stack hash changed, redeploying", "stack_name", project.Name)
-				toDeployConfigs[project.Name] = composeCfg
+				toDeploy[project.Name] = project
 			}
 		} else {
 			slog.Info("New stack detected", "stack_name", project.Name)
-			toDeployConfigs[project.Name] = composeCfg
+			toDeploy[project.Name] = project
 		}
 	}
 
@@ -142,32 +145,28 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	deployOrder := []string{}
 	if cfg != nil && len(cfg.StartupOrder) > 0 {
 		for _, stackName := range cfg.StartupOrder {
-			// Add StartupOrder first, if the stack in StartupOrder is also in toDeployConfigs
-			if _, exists := toDeployConfigs[stackName]; exists {
+			// Add StartupOrder first, if the stack in StartupOrder is also in toDeploy
+			if _, exists := toDeploy[stackName]; exists {
 				deployOrder = append(deployOrder, stackName)
 			}
 		}
 	}
 
 	// Add remaining stacks (not in StartupOrder)
-	for stackName := range toDeployConfigs {
+	for stackName := range toDeploy {
 		// Only add if not already in deployOrder
 		if !slices.Contains(deployOrder, stackName) {
 			deployOrder = append(deployOrder, stackName)
 		}
 	}
 
-	slog.Info("Deploying stacks", "count", len(deployOrder),
-		"order", strings.Join(deployOrder, ","))
+	if len(deployOrder) > 0 {
+		slog.Info("Deploying stacks", "count", len(deployOrder),
+			"order", strings.Join(deployOrder, ","))
+	}
 
 	for _, stackName := range deployOrder {
-		if stackCfg, exists := toDeployConfigs[stackName]; exists {
-			project, err := r.dClient.LoadProject(ctx, stackCfg)
-			if err != nil {
-				slog.Warn("Failed to load project for deployment", "stack_name", stackName, "error", err)
-				continue
-			}
-
+		if project, exists := toDeploy[stackName]; exists {
 			if err := r.Deploy(ctx, project); err != nil {
 				slog.Warn("Failed to deploy the stack", "stack_name", stackName, "error", err)
 				continue
@@ -180,8 +179,6 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	if err := r.Prune(ctx, composeCfgs); err != nil {
 		slog.Error("Failed to prune stacks", "error", err)
 	}
-
-	r.dClient.Prune(ctx)
 
 	return nil
 }

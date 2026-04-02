@@ -9,11 +9,6 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-type Timers struct {
-	GitInterval         time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
-	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
-}
-
 func (r *Reconciler) Run(ctx context.Context) {
 	// Sync from Git during bootstrap
 	if err := r.Sync(ctx); err != nil {

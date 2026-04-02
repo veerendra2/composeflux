@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/veerendra2/composeflux/internal/reconcile"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 	"github.com/veerendra2/composeflux/pkg/secrets"
 	"github.com/veerendra2/composeflux/pkg/source"
+	"github.com/veerendra2/gopackages/version"
 )
 
 // CommonConfig holds configuration shared between all commands
@@ -30,13 +33,13 @@ type CommonConfig struct {
 func (c *CommonConfig) Validate() error {
 	switch c.SecretsProvider {
 	case "bitwarden":
-		if c.Bitwarden.AccessToken == "" || c.Bitwarden.OrgId == "" || c.Bitwarden.ProjectId == "" {
+		if c.Bitwarden.AccessToken == "" || c.Bitwarden.OrgID == "" || c.Bitwarden.ProjectID == "" {
 			return fmt.Errorf("bitwarden provider requires: --bitwarden-access-token, " +
 				"--bitwarden-organization-id, --bitwarden-project-id")
 		}
 	case "infisical":
 		if c.Infisical.ClientID == "" || c.Infisical.ClientSecret == "" ||
-			c.Infisical.Environment == "" || c.Infisical.ProjectId == "" {
+			c.Infisical.Environment == "" || c.Infisical.ProjectID == "" {
 			return fmt.Errorf("infisical provider requires: --infisical-client-id, " +
 				"--infisical-client-secret, --infisical-environment, --infisical-project-id")
 		}
@@ -127,4 +130,30 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 
 	return rClient, cleanup, nil
+}
+
+// Setup performs shared startup: logs version info, sets up signal handling,
+// and initializes all clients. Returns the reconciler, a context bound to
+// OS signals, and a cleanup function that cancels the context and closes clients.
+func (c *CommonConfig) Setup() (*reconcile.Reconciler, context.Context, func(), error) {
+	slog.Info("Version information", version.Info()...)
+	slog.Info("Build context", version.BuildContext()...)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	rClient, clientCleanup, err := c.InitClients(ctx)
+	if err != nil {
+		stop()
+		if clientCleanup != nil {
+			clientCleanup()
+		}
+		return nil, nil, nil, err
+	}
+
+	cleanup := func() {
+		stop()
+		clientCleanup()
+	}
+
+	return rClient, ctx, cleanup, nil
 }

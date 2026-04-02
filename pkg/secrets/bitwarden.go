@@ -8,8 +8,8 @@ type BitwardenConfig struct {
 	ApiURL      string `name:"api-url" help:"API URL" env:"API_URL" default:"https://vault.bitwarden.com/api"`
 	IdentityURL string `name:"identity-url" help:"Identity URL" env:"IDENTITY_URL" default:"https://vault.bitwarden.com/identity"`
 	AccessToken string `name:"access-token" help:"Access token" env:"ACCESS_TOKEN"`
-	OrgId       string `name:"organization-id" help:"Organization ID" env:"ORGANIZATION_ID"`
-	ProjectId   string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
+	OrgID     string `name:"organization-id" help:"Organization ID" env:"ORGANIZATION_ID"`
+	ProjectID string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
 }
 
 type bitwardenClient struct {
@@ -20,27 +20,27 @@ type bitwardenClient struct {
 }
 
 // FetchAll retrieves all secrets.
-func (c *bitwardenClient) FetchAll() (*SecretsCollection, error) {
+func (c *bitwardenClient) FetchAll() ([]Secret, error) {
 	resp, err := c.bwClient.Secrets().Sync(c.organizationID, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert to our Secret format
-	var secretsCollection SecretsCollection
+	var secrets []Secret
 	for _, bwSecret := range resp.Secrets {
 		// Filter secrets by project ID
 		// Note: Sync() already returns only secrets the access token has permission to access,
 		// but we filter by project ID to ensure we only sync secrets from the specified project
 		if bwSecret.ProjectID != nil && *bwSecret.ProjectID == c.projectID {
-			secretsCollection.Secrets = append(secretsCollection.Secrets, Secret{
+			secrets = append(secrets, Secret{
 				Key:   bwSecret.Key,
 				Value: bwSecret.Value,
 			})
 		}
 	}
 
-	return &secretsCollection, nil
+	return secrets, nil
 }
 
 // Get retrieves a secret value by secret ID.
@@ -72,8 +72,8 @@ func NewBitwardenClient(cfg BitwardenConfig) (Client, error) {
 	}
 
 	return &bitwardenClient{
-		organizationID: cfg.OrgId,
-		projectID:      cfg.ProjectId,
+		organizationID: cfg.OrgID,
+		projectID:      cfg.ProjectID,
 		bwClient:       bwClient,
 	}, nil
 }

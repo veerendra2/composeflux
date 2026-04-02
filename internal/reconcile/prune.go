@@ -6,8 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/docker/compose/v5/pkg/api"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
+
+// isManagedStack checks if the stack is managed by composeflux via container labels.
+func isManagedStack(containers []api.ContainerSummary) bool {
+	return len(containers) > 0 && containers[0].Labels[LabelManaged] != ""
+}
 
 // Prune deletes the running stacks which are not in source repo
 func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
@@ -32,8 +38,8 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 			continue
 		}
 
-		// Ignore the stack if any container doesn't have managed label
-		if len(containers) == 0 || containers[0].Labels[LabelManagedBy] == "" {
+		// Ignore the stack if it's not managed by composeflux
+		if !isManagedStack(containers) {
 			continue
 		}
 
@@ -51,5 +57,46 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 		slog.Info("Pruned stacks", "count", len(prunedStacks), "stack_names", strings.Join(prunedStacks, ","))
 	}
 
+	// Prune unused Docker resources (containers, images, volumes, networks, build cache)
+	r.dClient.Prune(ctx)
+
 	return nil
+}
+
+type StackStateMap map[string]StackInfo
+
+type StackInfo struct {
+	Hash string
+}
+
+// getStackStates return StackStateMap which contains the stack hash
+func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) {
+	stackStateMap := make(StackStateMap)
+	stacks, err := r.dClient.List(ctx)
+	if err != nil {
+		return stackStateMap, err
+	}
+
+	for _, stack := range stacks {
+		containers, err := r.dClient.Ps(ctx, stack.Name)
+		if err != nil {
+			slog.Error("Failed to get stack", "error", err)
+			continue
+		}
+
+		// Ignore the stack if it's not managed by composeflux
+		if !isManagedStack(containers) {
+			continue
+		}
+
+		containerHash := ""
+		if hash, ok := containers[0].Labels[LabelStackHash]; ok {
+			containerHash = hash
+		}
+
+		stackStateMap[stack.Name] = StackInfo{
+			Hash: containerHash,
+		}
+	}
+	return stackStateMap, nil
 }

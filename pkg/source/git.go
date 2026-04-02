@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	SSHUser    = "git"
-	RemoteName = "origin"
+	sshUser    = "git"
+	remoteName = "origin"
 )
 
 type Config struct {
@@ -41,7 +41,7 @@ type client struct {
 // Pull syncs latest changes from remote
 func (c *client) Pull(ctx context.Context) error {
 	err := c.repo.FetchContext(ctx, &git.FetchOptions{
-		RemoteName: RemoteName,
+		RemoteName: remoteName,
 		Auth:       c.sshAuth,
 		Force:      true, // required for force-pushed branches to update remote tracking refs
 	})
@@ -52,7 +52,7 @@ func (c *client) Pull(ctx context.Context) error {
 	// Hard reset to remote tracking ref — handles force-push and cases where
 	// HasUpdates() already fetched (making PullContext return NoErrAlreadyUpToDate early
 	// without actually updating the worktree)
-	remoteRef, err := c.repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, c.branch), true)
+	remoteRef, err := c.repo.Reference(plumbing.NewRemoteReferenceName(remoteName, c.branch), true)
 	if err != nil {
 		return fmt.Errorf("failed to resolve remote ref: %w", err)
 	}
@@ -63,45 +63,53 @@ func (c *client) Pull(ctx context.Context) error {
 	}
 
 	if err := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset}); err != nil {
-		return fmt.Errorf("failed to reset to %s/%s: %w", RemoteName, c.branch, err)
+		return fmt.Errorf("failed to reset to %s/%s: %w", remoteName, c.branch, err)
 	}
 	return nil
 }
 
-// HasUpdates checks for remote changes and returns update status with commit SHAs
+// HasUpdates checks for remote changes and returns update status with short commit SHAs (for logging)
 func (c *client) HasUpdates(ctx context.Context) (bool, string, string, error) {
 	// Get local HEAD commit
 	localRef, err := c.repo.Head()
 	localSHA := ""
 	if err == nil {
-		localSHA = localRef.Hash().String()[:7]
+		localSHA = localRef.Hash().String()
 	}
 
 	// Fetch from remote
 	err = c.repo.FetchContext(ctx, &git.FetchOptions{
-		RemoteName: RemoteName,
+		RemoteName: remoteName,
 		Auth:       c.sshAuth,
 		Force:      true,
 	})
 
 	if errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return false, localSHA, localSHA, nil
+		return false, shortSHA(localSHA), shortSHA(localSHA), nil
 	}
 
 	if err != nil {
-		return false, localSHA, "", err
+		return false, shortSHA(localSHA), "", err
 	}
 
 	// Get remote HEAD commit
-	remoteBranchRef := plumbing.ReferenceName(fmt.Sprintf("refs/remotes/%s/%s", RemoteName, c.branch))
+	remoteBranchRef := plumbing.ReferenceName(fmt.Sprintf("refs/remotes/%s/%s", remoteName, c.branch))
 	remoteRef, err := c.repo.Reference(remoteBranchRef, true)
 	remoteSHA := ""
 	if err == nil {
-		remoteSHA = remoteRef.Hash().String()[:7]
+		remoteSHA = remoteRef.Hash().String()
 	}
 
 	hasUpdates := localSHA != remoteSHA
-	return hasUpdates, remoteSHA, localSHA, nil
+	return hasUpdates, shortSHA(remoteSHA), shortSHA(localSHA), nil
+}
+
+// shortSHA returns the first 7 characters of a SHA for display purposes.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 // Path returns the local repository path
@@ -110,7 +118,7 @@ func (c *client) Path() string {
 }
 
 func New(cfg Config) (Client, error) {
-	sshAuth, err := ssh.NewPublicKeysFromFile(SSHUser, cfg.SSHKeyPath, "")
+	sshAuth, err := ssh.NewPublicKeysFromFile(sshUser, cfg.SSHKeyPath, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load SSH key: %w", err)
 	}
@@ -144,10 +152,10 @@ func New(cfg Config) (Client, error) {
 		opts := &git.CheckoutOptions{Branch: branchRef}
 		if _, err := repo.Reference(branchRef, false); err != nil {
 			// Local branch doesn't exist yet — fetch and create it from remote tracking ref
-			if err := repo.Fetch(&git.FetchOptions{RemoteName: RemoteName, Auth: sshAuth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			if err := repo.Fetch(&git.FetchOptions{RemoteName: remoteName, Auth: sshAuth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 				return nil, fmt.Errorf("failed to fetch: %w", err)
 			}
-			remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, cfg.Branch), true)
+			remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(remoteName, cfg.Branch), true)
 			if err != nil {
 				return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
 			}

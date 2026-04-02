@@ -11,8 +11,8 @@ type InfisicalConfig struct {
 	ClientID     string `name:"client-id" help:"Client ID (Universal Auth)" env:"CLIENT_ID"`
 	ClientSecret string `name:"client-secret" help:"Client Secret (Universal Auth)" env:"CLIENT_SECRET"`
 	Environment  string `name:"environment" help:"Environment slug" env:"ENVIRONMENT"`
-	ProjectId    string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
-	SecretPath   string `name:"secret-path" help:"Project ID" env:"SECRET_PATH" default:"/"`
+	ProjectID    string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
+	SecretPath   string `name:"secret-path" help:"Secret path" env:"SECRET_PATH" default:"/"`
 }
 
 type infisicalClient struct {
@@ -39,7 +39,7 @@ func (c *infisicalClient) Get(key string) (string, error) {
 }
 
 // FetchAll retrieves all secrets.
-func (c *infisicalClient) FetchAll() (*SecretsCollection, error) {
+func (c *infisicalClient) FetchAll() ([]Secret, error) {
 	secrets, err := c.infClient.Secrets().List(infisical.ListSecretsOptions{
 		Environment: c.environment,
 		ProjectID:   c.projectId,
@@ -49,15 +49,15 @@ func (c *infisicalClient) FetchAll() (*SecretsCollection, error) {
 		return nil, err
 	}
 
-	var secretsCollection SecretsCollection
+	result := make([]Secret, 0, len(secrets))
 	for _, secret := range secrets {
-		secretsCollection.Secrets = append(secretsCollection.Secrets, Secret{
+		result = append(result, Secret{
 			Key:   secret.SecretKey,
 			Value: secret.SecretValue,
 		})
 	}
 
-	return &secretsCollection, nil
+	return result, nil
 }
 
 func (c *infisicalClient) Close() {
@@ -74,7 +74,7 @@ func NewInfisicalClient(ctx context.Context, cfg InfisicalConfig) (Client, error
 	}
 
 	return &infisicalClient{
-		projectId:   cfg.ProjectId,
+		projectId:   cfg.ProjectID,
 		environment: cfg.Environment,
 		secretPath:  cfg.SecretPath,
 		infClient:   client,
