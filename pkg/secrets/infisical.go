@@ -40,7 +40,7 @@ func (c *infisicalClient) Get(key string) (string, error) {
 
 // FetchAll retrieves all secrets.
 func (c *infisicalClient) FetchAll() ([]Secret, error) {
-	secrets, err := c.infClient.Secrets().List(infisical.ListSecretsOptions{
+	listResult, err := c.infClient.Secrets().ListSecrets(infisical.ListSecretsOptions{
 		Environment: c.environment,
 		ProjectID:   c.projectId,
 		SecretPath:  c.secretPath,
@@ -49,8 +49,8 @@ func (c *infisicalClient) FetchAll() ([]Secret, error) {
 		return nil, err
 	}
 
-	result := make([]Secret, 0, len(secrets))
-	for _, secret := range secrets {
+	result := make([]Secret, 0, len(listResult.Secrets))
+	for _, secret := range listResult.Secrets {
 		result = append(result, Secret{
 			Key:   secret.SecretKey,
 			Value: secret.SecretValue,
