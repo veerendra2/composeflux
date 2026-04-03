@@ -81,7 +81,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	if cfg == nil {
-		slog.Warn("Stack config not found in the Git repo, continuing without it")
+		slog.Warn("Stack config not found, continuing without it")
 	}
 
 	// Validate StartupOrder directories exist

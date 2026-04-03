@@ -97,7 +97,6 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 
 	// Create git client
-	slog.Info("Git repository", "path", c.Source.ClonePath, "branch", c.Source.Branch)
 	gClient, err := source.New(c.Source)
 	if err != nil {
 		slog.Error("Failed to create git client", "error", err)
@@ -120,7 +119,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 		slog.Error("Failed to get docker compose version", "error", err)
 		return nil, cleanup, err
 	}
-	slog.Info("Docker and compose versions", dockerVersion...)
+	slog.Info("Docker version", dockerVersion...)
 
 	// Create reconciler
 	rClient, err := reconcile.New(c.Reconciler, sClient, gClient, dClient)
@@ -128,6 +127,8 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 		slog.Error("Failed to create reconciler client", "error", err)
 		return nil, cleanup, err
 	}
+
+	slog.Info("Reconciler configured", "stack_path", c.Reconciler.StackPath, "config_file", c.Reconciler.ConfigFile)
 
 	return rClient, cleanup, nil
 }
