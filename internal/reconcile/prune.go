@@ -12,7 +12,7 @@ import (
 
 // isManagedStack checks if the stack is managed by composeflux via container labels.
 func isManagedStack(containers []api.ContainerSummary) bool {
-	return len(containers) > 0 && containers[0].Labels[LabelManaged] != ""
+	return len(containers) > 0 && containers[0].Labels[LabelManaged] == ManagedValue
 }
 
 // Prune deletes the running stacks which are not in source repo
@@ -69,7 +69,7 @@ type StackInfo struct {
 	Hash string
 }
 
-// getStackStates return StackStateMap which contains the stack hash
+// getStackStates returns a StackStateMap keyed by stack name containing each stack's hash
 func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) {
 	stackStateMap := make(StackStateMap)
 	stacks, err := r.dClient.List(ctx)
