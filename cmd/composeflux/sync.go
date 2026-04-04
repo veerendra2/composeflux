@@ -3,12 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
-
-	"github.com/veerendra2/gopackages/version"
 )
 
 type SyncCmd struct {
@@ -20,13 +15,7 @@ func (s *SyncCmd) AfterApply() error {
 }
 
 func (s *SyncCmd) Run() error {
-	slog.Info("Version information", version.Info()...)
-	slog.Info("Build context", version.BuildContext()...)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	rClient, cleanup, err := s.InitClients(ctx)
+	rClient, ctx, cleanup, err := s.Setup()
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,7 @@
 ComposeFlux is a Go application that implements a GitOps reconciliation loop for Docker Compose stacks. It polls a Git repository, detects changes via SHA256 checksums stored as container labels, and deploys/prunes stacks using the native Docker Compose SDK.
 
 **Module**: `github.com/veerendra2/composeflux`  
-**Go version**: 1.26.0 (CGO enabled — Bitwarden SDK uses cgo FFI into Rust)
+**Go version**: 1.26.1 (CGO enabled — Bitwarden SDK uses cgo FFI into Rust)
 
 ---
 
@@ -93,11 +93,11 @@ import (
 | Element | Convention | Example |
 |---|---|---|
 | Variables, fields | `camelCase` | `stackPath`, `gitInterval` |
-| Exported functions/methods | `PascalCase` | `New()`, `Deploy()`, `CacheGet()` |
+| Exported functions/methods | `PascalCase` | `New()`, `Deploy()`, `Sync()` |
 | Unexported functions | `camelCase` | `projectChecksum()`, `discoverComposeStack()` |
 | Structs / Types | `PascalCase` | `Reconciler`, `StackConfig` |
 | Interfaces | `PascalCase` | `Client` |
-| Exported constants | `PascalCase` | `LabelManagedBy`, `LabelStackHash` |
+| Exported constants | `PascalCase` | `LabelManaged`, `LabelStackHash` |
 | Unexported constants | `camelCase` | `appName` |
 | Source files | `snake_case.go` | `deploy.go`, `cache.go`, `bitwarden.go` |
 | Receiver names | Short (1–2 letters) | `r` for `*Reconciler`, `c` for `*client` |
@@ -167,7 +167,7 @@ ctx.FatalIfErrorf(ctx.Run())
 - `cacheMu sync.RWMutex` protects the shared env/secret cache; use `RLock` for reads, `Lock` for writes.
 - `reconcileMu sync.Mutex` serializes `Sync` and `SyncImages` to prevent concurrent cache mutation and partial deployments — lock it as the first action in both methods.
 - `sync.Mutex` / `sync.RWMutex` zero values are ready to use; do not initialise them explicitly in `New()`.
-- Nil cached slices after clearing (`CacheClear`) to fully release memory.
+- Nil cached slices after clearing (`cacheClear`) to fully release memory.
 
 ### Constructor Pattern
 
@@ -184,6 +184,6 @@ ctx.FatalIfErrorf(ctx.Run())
 ## Docker / Build Notes
 
 - CGO is enabled (`CGO_ENABLED=1`) for the Bitwarden SDK (Rust FFI).
-- Multi-stage Dockerfile: `golang:1.26.0` builder → `gcr.io/distroless/static-debian13` final image.
+- Multi-stage Dockerfile: `golang:1.26.1` builder → `gcr.io/distroless/static-debian13` final image.
 - Version info injected at link time via `-ldflags` (git tag, commit SHA, branch, build date).
 - Local dev: `task compose` runs the app via `compose-dev.yml`.

@@ -15,13 +15,9 @@ type Secret struct {
 	Value string
 }
 
-type SecretsCollection struct {
-	Secrets []Secret
-}
-
 type Client interface {
 	Get(id string) (string, error)
-	FetchAll() (*SecretsCollection, error)
+	FetchAll() ([]Secret, error)
 	Close()
 }
 
