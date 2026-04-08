@@ -21,6 +21,10 @@ func (r *Reconciler) cacheGet() []string {
 // cacheLoadSecrets fetches all secrets from external source
 // and stores in cache as "key=value" items
 func (r *Reconciler) cacheLoadSecrets() error {
+	if r.sClient == nil {
+		return nil
+	}
+
 	secrets, err := r.sClient.FetchAll()
 	if err != nil {
 		return err

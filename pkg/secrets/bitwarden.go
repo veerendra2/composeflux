@@ -8,8 +8,8 @@ type BitwardenConfig struct {
 	ApiURL      string `name:"api-url" help:"API URL" env:"API_URL" default:"https://vault.bitwarden.com/api"`
 	IdentityURL string `name:"identity-url" help:"Identity URL" env:"IDENTITY_URL" default:"https://vault.bitwarden.com/identity"`
 	AccessToken string `name:"access-token" help:"Access token" env:"ACCESS_TOKEN"`
-	OrgID     string `name:"organization-id" help:"Organization ID" env:"ORGANIZATION_ID"`
-	ProjectID string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
+	OrgID       string `name:"organization-id" help:"Organization ID" env:"ORGANIZATION_ID"`
+	ProjectID   string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
 }
 
 type bitwardenClient struct {

@@ -29,7 +29,9 @@ ComposeFlux uses `INFISICAL_ENVIRONMENT`, so you must provide an environment slu
 
 Add secrets in the project environment you selected:
 
-- If you want ComposeFlux to fetch your Git SSH deploy key from Infisical at startup, create a secret with key `SSH_PRIVATE_KEY` (or another key name and set `GIT_DEPLOY_KEY_SECRET_REF` to match). See [Deploy Key Secret Reference](../GettingStarted.md#deploy-key-secret-reference).
+- If you want ComposeFlux to fetch your Git SSH deploy key from Infisical at startup, create a secret with key
+  `SSH_PRIVATE_KEY` (or another key name and set `GIT_DEPLOY_KEY_SECRET_REF` to match). See
+  [Deploy Key Secret Reference](../GettingStarted.md#deploy-key-secret-reference).
 
 ![SSH Key](../assets/infisical-ssh-key.png)
 
@@ -37,7 +39,8 @@ Add secrets in the project environment you selected:
 
 ### 4. Create Folders (Optional)
 
-Infisical supports organizing secrets in folders. If you use folders, set `INFISICAL_SECRET_PATH` to the folder path used by ComposeFlux.
+Infisical supports organizing secrets in folders. If you use folders, set `INFISICAL_SECRET_PATH` to the folder path
+used by ComposeFlux.
 
 1. In the **Overview** tab, click **Add Secrets** and select **Add Folder**.
 2. Note the folder path (for example, `/`, `/apps/prod`).
@@ -95,7 +98,8 @@ INFISICAL_SECRET_PATH=/
 
 ## Usage in Compose Stacks
 
-ComposeFlux fetches secrets from the configured Infisical project/environment/path and exposes them as environment variables using each secret key name.
+ComposeFlux fetches secrets from the configured Infisical project/environment/path and exposes them as environment
+variables using each secret key name.
 
 ```yaml
 services:

@@ -17,13 +17,8 @@ import (
 	"github.com/veerendra2/gopackages/version"
 )
 
-// CommonConfig holds configuration shared between all commands
 type CommonConfig struct {
-	SecretsProvider string `name:"secrets-provider" enum:"bitwarden,infisical" env:"SECRETS_PROVIDER" required:"" help:"Secrets manager provider to use (bitwarden or infisical)"`
-
-	Bitwarden secrets.BitwardenConfig `embed:"" prefix:"bitwarden-" envprefix:"BITWARDEN_" group:"Bitwarden Options:"`
-	Infisical secrets.InfisicalConfig `embed:"" prefix:"infisical-" envprefix:"INFISICAL_" group:"Infisical Options:"`
-
+	Secrets       secrets.Config       `embed:""`
 	Reconciler    reconcile.Config     `embed:"" group:"Reconciler Options:"`
 	Source        source.Config        `embed:"" group:"Git Source Options:"`
 	DockerCompose dockercompose.Config `embed:"" group:"Docker Compose Options:"`
@@ -31,15 +26,19 @@ type CommonConfig struct {
 
 // Validate checks provider-specific configuration
 func (c *CommonConfig) Validate() error {
-	switch c.SecretsProvider {
+	switch c.Secrets.Provider {
+	case "":
+		if c.Source.DeployKeySecretRef != "" {
+			return fmt.Errorf("--deploy-key-secret-ref requires a secrets provider (--secrets-provider)")
+		}
 	case "bitwarden":
-		if c.Bitwarden.AccessToken == "" || c.Bitwarden.OrgID == "" || c.Bitwarden.ProjectID == "" {
+		if c.Secrets.Bitwarden.AccessToken == "" || c.Secrets.Bitwarden.OrgID == "" || c.Secrets.Bitwarden.ProjectID == "" {
 			return fmt.Errorf("bitwarden provider requires: --bitwarden-access-token, " +
 				"--bitwarden-organization-id, --bitwarden-project-id")
 		}
 	case "infisical":
-		if c.Infisical.ClientID == "" || c.Infisical.ClientSecret == "" ||
-			c.Infisical.Environment == "" || c.Infisical.ProjectID == "" {
+		if c.Secrets.Infisical.ClientID == "" || c.Secrets.Infisical.ClientSecret == "" ||
+			c.Secrets.Infisical.Environment == "" || c.Secrets.Infisical.ProjectID == "" {
 			return fmt.Errorf("infisical provider requires: --infisical-client-id, " +
 				"--infisical-client-secret, --infisical-environment, --infisical-project-id")
 		}
@@ -49,24 +48,23 @@ func (c *CommonConfig) Validate() error {
 
 // InitClients initializes all required clients (secrets, git, docker, reconciler)
 func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, func(), error) {
-	// Create secrets client
-	secretsCfg := secrets.Config{
-		BitwardenConfig: c.Bitwarden,
-		InfisicalConfig: c.Infisical,
-	}
-
-	sClient, err := secrets.New(ctx, c.SecretsProvider, secretsCfg)
+	sClient, err := secrets.New(ctx, c.Secrets)
 	if err != nil {
-		slog.Error("Failed to create secrets manager client", "provider", c.SecretsProvider, "error", err)
+		slog.Error("Failed to create secrets manager client", "provider", c.Secrets.Provider, "error", err)
 		return nil, nil, err
 	}
 
 	cleanup := func() {
-		sClient.Close()
+		if sClient != nil {
+			sClient.Close()
+		}
 	}
 
 	// Fetch SSH deploy key from secrets manager if specified
 	if c.Source.DeployKeySecretRef != "" {
+		if sClient == nil {
+			return nil, cleanup, fmt.Errorf("--deploy-key-secret-ref requires a secrets provider (--secrets-provider)")
+		}
 		slog.Debug("Fetching SSH deploy key from secrets manager", "deploy_key_ref", c.Source.DeployKeySecretRef)
 
 		keyContent, err := sClient.Get(c.Source.DeployKeySecretRef)
@@ -128,7 +126,9 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 		return nil, cleanup, err
 	}
 
-	slog.Info("Reconciler configured", "stack_path", c.Reconciler.StackPath, "config_file", c.Reconciler.ConfigFile)
+	slog.Info("Reconciler configured", "stack_path", c.Reconciler.StackPath, "config_file", c.Reconciler.ConfigFile,
+		"secrets_manager", c.Secrets.Provider, "git_poll_interval", c.Reconciler.GitInterval,
+		"image_update_cron", c.Reconciler.ImageUpdateSchedule)
 
 	return rClient, cleanup, nil
 }

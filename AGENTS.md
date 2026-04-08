@@ -5,7 +5,7 @@
 ComposeFlux is a Go application that implements a GitOps reconciliation loop for Docker Compose stacks. It polls a Git repository, detects changes via SHA256 checksums stored as container labels, and deploys/prunes stacks using the native Docker Compose SDK.
 
 **Module**: `github.com/veerendra2/composeflux`  
-**Go version**: 1.26.1 (CGO enabled — Bitwarden SDK uses cgo FFI into Rust)
+**Go version**: 1.26.2 (CGO enabled — Bitwarden SDK uses cgo FFI into Rust)
 
 ---
 
@@ -16,7 +16,7 @@ cmd/composeflux/        # Main binary entry point (CLI setup via kong)
 cmd/prune-playground/   # Dev scratch binary
 internal/reconcile/     # Core reconciliation logic (private to module)
 pkg/dockercompose/      # Docker Compose SDK wrapper (exported)
-pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical)
+pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical) — optional
 pkg/source/             # Git client (go-git)
 docs/                   # MkDocs documentation
 ```
@@ -184,6 +184,6 @@ ctx.FatalIfErrorf(ctx.Run())
 ## Docker / Build Notes
 
 - CGO is enabled (`CGO_ENABLED=1`) for the Bitwarden SDK (Rust FFI).
-- Multi-stage Dockerfile: `golang:1.26.1` builder → `gcr.io/distroless/static-debian13` final image.
+- Multi-stage Dockerfile: `golang:1.26.2` builder → `gcr.io/distroless/static-debian13` final image.
 - Version info injected at link time via `-ldflags` (git tag, commit SHA, branch, build date).
 - Local dev: `task compose` runs the app via `compose-dev.yml`.

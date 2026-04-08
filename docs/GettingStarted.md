@@ -6,18 +6,23 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 - Docker with Compose v2+
 - Git repository with Compose stacks
-- Secrets manager: **Bitwarden** or **Infisical** (required)
+- Secrets manager: **Bitwarden** or **Infisical** (optional, for secrets injection and deploy key fetching)
 - SSH key for Git access (store in secrets manager or mount as volume)
 
 ## Environment Variables
 
 ### Required
 
-| Variable           | Description                                                   |
-| ------------------ | ------------------------------------------------------------- |
-| `SECRETS_PROVIDER` | Secrets manager: `bitwarden` or `infisical` (required)        |
-| `GIT_REPO_URL`     | Git repository SSH URL (e.g., `git@github.com:user/repo.git`) |
-| `STACK_PATH`       | Path to stacks directory in repo (relative to repo root)      |
+| Variable       | Description                                                   |
+| -------------- | ------------------------------------------------------------- |
+| `GIT_REPO_URL` | Git repository SSH URL (e.g., `git@github.com:user/repo.git`) |
+| `STACK_PATH`   | Path to stacks directory in repo (relative to repo root)      |
+
+### Optional - Secrets Provider
+
+| Variable           | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `SECRETS_PROVIDER` | Secrets manager: `bitwarden` or `infisical` (optional) |
 
 **Bitwarden (when `SECRETS_PROVIDER=bitwarden`):**
 
@@ -44,11 +49,11 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 | Variable                    | Description                                                                                                                   | Default                    |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `GIT_DEPLOY_KEY_SECRET_REF` | Deploy key secret reference (name or ID) in secrets manager (See [Deploy Key Secret Reference](#deploy-key-secret-reference)) | `SSH_PRIVATE_KEY`          |
+| `GIT_DEPLOY_KEY_SECRET_REF` | Deploy key secret reference (name or ID) in secrets manager (See [Deploy Key Secret Reference](#deploy-key-secret-reference)) |                            |
 | `GIT_SSH_KEY_PATH`          | SSH key path inside container                                                                                                 | `/.ssh/composeflux_id_rsa` |
 | `GIT_CLONE_PATH`            | Local clone directory                                                                                                         | `/opt/compose-stack`       |
 | `GIT_INTERVAL`              | Git sync interval                                                                                                             | `5m`                       |
-| `IMAGE_UPDATE_SCHEDULE`     | Cron expression for Docker image update checks, e.g. `0 3 * * *`. Empty = disabled.                                          | `""`                       |
+| `IMAGE_UPDATE_SCHEDULE`     | Cron expression for Docker image update checks, e.g. `0 3 * * *`. Empty = disabled.                                           | `""`                       |
 | `GIT_BRANCH`                | Git branch to track                                                                                                           | `main`                     |
 | `CONFIG_FILE`               | Stack config file name (see [Stack Configuration](Introduction.md#stack-configuration))                                       | `stack.yml`                |
 | `LOG_LEVEL`                 | Log level (`debug`/`info`/`warn`/`error`)                                                                                     | `info`                     |
@@ -78,8 +83,11 @@ Commands:
 Run "composeflux <command> --help" for more information on a command.
 ```
 
-- **`run`** - Daemon mode with continuous reconciliation (default). Performs an initial sync at startup, then checks the Git repository for changes at configured intervals (default: 5 minutes).
-- **`sync`** - One-shot sync and deploy. Manually triggers immediate synchronization. Useful when you update secrets in your secrets manager but haven't made Git changes. See [Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
+- **`run`** - Daemon mode with continuous reconciliation (default). Performs an initial sync at startup, then checks the
+  Git repository for changes at configured intervals (default: 5 minutes).
+- **`sync`** - One-shot sync and deploy. Manually triggers immediate synchronization. Useful when you update secrets in
+  your secrets manager but haven't made Git changes. See
+  [Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
 
 ```bash
 # Daemon mode (initial sync at startup, then checks Git every 5 minutes)
@@ -89,7 +97,10 @@ composeflux run
 composeflux sync
 ```
 
-**Important**: After the initial startup sync, the `run` command fetches secrets and deploys changes only when Git updates are detected. If you update secrets in your secrets manager without changing anything in Git, run `composeflux sync` manually to apply updated secrets. See [Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
+**Important**: After the initial startup sync, the `run` command fetches secrets and deploys changes only when Git
+updates are detected. If you update secrets in your secrets manager without changing anything in Git, run
+`composeflux sync` manually to apply updated secrets. See
+[Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
 
 ## Deploy ComposeFlux
 
@@ -109,7 +120,7 @@ composeflux sync
 GIT_REPO_URL=git@github.com:user/stacks-repo.git
 STACK_PATH=stacks
 
-# Required - Choose one secrets provider:
+# Optional - Choose a secrets provider (omit to run without secrets):
 
 # Option A: Bitwarden
 SECRETS_PROVIDER=bitwarden
@@ -120,7 +131,7 @@ BITWARDEN_PROJECT_ID=your-project-id
 
 # Option B: Infisical
 # SECRETS_PROVIDER=infisical
-# GIT_DEPLOY_KEY_SECRET_REF=SSH_PRIVATE_KEY (Default)
+# GIT_DEPLOY_KEY_SECRET_REF=SSH_PRIVATE_KEY
 # INFISICAL_CLIENT_ID=your-client-id
 # INFISICAL_CLIENT_SECRET=your-client-secret
 # INFISICAL_ENVIRONMENT=prod
@@ -143,12 +154,12 @@ services:
       # GIT_INTERVAL: 5m              # Sync interval
       # GIT_BRANCH: main
 
-      # Secrets Manager - Bitwarden
-      SECRETS_PROVIDER: ${SECRETS_PROVIDER}
-      GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
-      BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
-      BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
-      BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
+      # Secrets Manager - Bitwarden (optional)
+      # SECRETS_PROVIDER: ${SECRETS_PROVIDER}
+      # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
+      # BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
+      # BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
+      # BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
 
       # Secrets Manager - Infisical (comment out Bitwarden above if using this)
       # SECRETS_PROVIDER: infisical
@@ -170,7 +181,6 @@ services:
       # - ./ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro
 
       # Optional: Mount local SSH key instead of fetching from secrets manager
-      # Uncomment below and set GIT_DEPLOY_KEY_SECRET_REF="" in environment above
       # - ~/.ssh/id_rsa:/.ssh/composeflux_id_rsa:ro
 ```
 
@@ -178,20 +188,24 @@ services:
 
 If you prefer to mount your SSH key directly instead of storing it in the secrets manager:
 
-1. Set `GIT_DEPLOY_KEY_SECRET_REF=""` (empty string) in environment variables to disable fetch
+1. Leave `SECRETS_PROVIDER` unset (or omit it entirely)
 2. Mount your SSH key to the container at `GIT_SSH_KEY_PATH` location (default: `/.ssh/composeflux_id_rsa`)
 
 ### Deploy Key Secret Reference
 
-ComposeFlux can fetch your SSH deploy key from the secrets manager during startup, so it can clone private repositories without mounting a local key.
+ComposeFlux can fetch your SSH deploy key from the secrets manager during startup, so it can clone private repositories
+without mounting a local key.
 
 How `GIT_DEPLOY_KEY_SECRET_REF` works:
 
-- When set to a value (e.g., `SSH_PRIVATE_KEY` or a Bitwarden secret ID), ComposeFlux fetches that secret from your secrets manager
-- **Bitwarden**: Uses it as the secret ID to fetch (see [Bitwarden Add Secrets](how-to-guides/Bitwarden.md#2-add-secrets))
+- Requires `SECRETS_PROVIDER` to be set
+- When set to a value (e.g., `SSH_PRIVATE_KEY` or a Bitwarden secret ID), ComposeFlux fetches that secret from your
+  secrets manager
+- **Bitwarden**: Uses it as the secret ID to fetch (see
+  [Bitwarden Add Secrets](how-to-guides/Bitwarden.md#2-add-secrets))
 - **Infisical**: Uses it as the secret key name to fetch
 - The fetched content must be your SSH private key
-- When set to `""` (empty string), skips fetch and uses mounted key at `GIT_SSH_KEY_PATH`
+- When left empty (default), skips fetch and uses mounted key at `GIT_SSH_KEY_PATH`
 
 Example:
 
