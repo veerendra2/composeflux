@@ -1,6 +1,7 @@
 # Introduction
 
-ComposeFlux is a GitOps tool for managing Docker Compose stacks on home servers. It watches a Git repository and automatically deploys stacks when changes are detected.
+ComposeFlux is a GitOps tool for managing Docker Compose stacks on home servers. It watches a Git repository and
+automatically deploys stacks when changes are detected.
 
 ## Goals
 
@@ -13,9 +14,12 @@ ComposeFlux is a GitOps tool for managing Docker Compose stacks on home servers.
 
 ![Arch](./assets/arch.png)
 
-ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an initial sync at startup, then checks the remote Git repository for changes and syncs again when updates are detected.
+ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an initial sync at startup, then checks the
+remote Git repository for changes and syncs again when updates are detected.
 
-Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks when a new image digest is detected.
+Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks
+when a new image digest is detected.
+
 1. Pulls latest commits
 2. Fetches secrets from secrets manager
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
@@ -29,8 +33,11 @@ Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE
 ComposeFlux uses a hash-based approach to decide whether a stack needs redeploying:
 
 - SHA256 hash is calculated from the entire Compose project (after variable substitution with secrets)
-- **Includes secrets**: The hash includes resolved secrets at sync time. If secrets change, you can run `composeflux sync` (or wait for the next Git change) to fetch them and update the hash.
-- To take full advantage of hash-based detection for app config changes, prefer Docker Compose [`configs`](https://docs.docker.com/reference/compose-file/configs/) in your Compose files instead of mounting plain app config files directly into containers.
+- **Includes secrets**: The hash includes resolved secrets at sync time. If secrets change, you can run
+  `composeflux sync` (or wait for the next Git change) to fetch them and update the hash.
+- To take full advantage of hash-based detection for app config changes, prefer Docker Compose
+  [`configs`](https://docs.docker.com/reference/compose-file/configs/) in your Compose files instead of mounting plain
+  app config files directly into containers.
 - Stack is redeployed only when the hash changes; otherwise it is skipped (no unnecessary redeployment)
 - Hash is stored in the `composeflux.stack-hash` label on deployed containers
 
@@ -116,9 +123,10 @@ Each ComposeFlux instance only manages stacks in its configured directory.
 - Nested stack discovery (only scans one level deep)
 - Multi-server orchestration (no central controller)
 - Rolling updates or zero-downtime deployments
-- No active reconciliation of stack/container status (e.g., stopped/exited containers are not auto-redeployed). This used to be part of the implementation but was removed for simplicity. (💡 _Use Docker [restart policies](https://docs.docker.com/engine/containers/start-containers-automatically/) instead_)
+- No active reconciliation of stack/container status (e.g., stopped/exited containers are not auto-redeployed). This
+  used to be part of the implementation but was removed for simplicity. (💡 _Use Docker
+  [restart policies](https://docs.docker.com/engine/containers/start-containers-automatically/) instead_)
 - Built-in monitoring or alerting
-- Secrets manager is required at the moment. You must configure Bitwarden or Infisical even if you don’t plan to use secrets (this may change later).
 
 **Stack Discovery is One Level Deep:**
 

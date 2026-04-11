@@ -11,7 +11,9 @@
 - Linux: `musl-gcc`
 - macOS: Xcode Command Line Tools
 
-> _CGO must be enabled (`CGO_ENABLED=1`, already set in `Taskfile.yml`) because ComposeFlux uses the Bitwarden Go SDK, which calls into the Bitwarden Rust SDK via FFI using cgo. See [Bitwarden SDK Go instructions](https://github.com/bitwarden/sdk-go/blob/main/INSTRUCTIONS.md)._
+> _CGO must be enabled (`CGO_ENABLED=1`, already set in `Taskfile.yml`) because ComposeFlux uses the Bitwarden Go SDK,
+> which calls into the Bitwarden Rust SDK via FFI using cgo. See
+> [Bitwarden SDK Go instructions](https://github.com/bitwarden/sdk-go/blob/main/INSTRUCTIONS.md)._
 
 ## Quick Setup
 
@@ -26,7 +28,8 @@ task build
 
 ### MkDocs Local Setup
 
-If you use direnv and pyenv, an [.envrc](../.envrc) is already configured. Otherwise, set up a Python virtual environment manually:
+If you use direnv and pyenv, an [.envrc](../.envrc) is already configured. Otherwise, set up a Python virtual
+environment manually:
 
 ```bash
 python3 -m venv venv/

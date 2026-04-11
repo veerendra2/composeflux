@@ -19,7 +19,9 @@ Set up Bitwarden Secrets Manager as the secrets provider for ComposeFlux.
 
 Add secrets to the project.
 
-- If you want ComposeFlux to fetch your Git SSH deploy key from Bitwarden at startup, create a secret that stores the private key, then copy that secret's ID for `GIT_DEPLOY_KEY_SECRET_REF`. See [Deploy Key Secret Reference](../GettingStarted.md#deploy-key-secret-reference).
+- If you want ComposeFlux to fetch your Git SSH deploy key from Bitwarden at startup, create a secret that stores the
+  private key, then copy that secret's ID for `GIT_DEPLOY_KEY_SECRET_REF`. See
+  [Deploy Key Secret Reference](../GettingStarted.md#deploy-key-secret-reference).
 
 ![Bitwarden Secret Creation](../assets/bw-example-secrets-add.png)
 
@@ -75,7 +77,8 @@ GIT_DEPLOY_KEY_SECRET_REF=<bitwarden-secret-id>
 
 ## Usage in Compose Stacks
 
-ComposeFlux fetches secrets from the configured Bitwarden project and exposes them as environment variables using each secret key name.
+ComposeFlux fetches secrets from the configured Bitwarden project and exposes them as environment variables using each
+secret key name.
 
 ```yaml
 services:

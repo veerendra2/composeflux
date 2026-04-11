@@ -45,32 +45,31 @@ For more details, see:
 
 ## Configure ComposeFlux
 
-ComposeFlux automatically fetches `SSH_PRIVATE_KEY` from your secrets manager (default behavior).
-
-**No additional configuration needed** - just ensure:
+To have ComposeFlux fetch `SSH_PRIVATE_KEY` from your secrets manager, set `GIT_DEPLOY_KEY_SECRET_REF`:
 
 ```yaml
 # In compose.yml
 environment:
   GIT_REPO_URL: git@github.com:user/repo.git # SSH URL
-  # GIT_DEPLOY_KEY_SECRET_REF: SSH_PRIVATE_KEY  # Default, change if using different name
+  SECRETS_PROVIDER: bitwarden # or infisical
+  GIT_DEPLOY_KEY_SECRET_REF: SSH_PRIVATE_KEY # Change if using a different name
 ```
 
 ## Alternative: Mount Local Key
 
-Skip secrets manager and mount key directly:
+Skip secrets manager and mount key directly (no `SECRETS_PROVIDER` needed):
 
 ```yaml
 # In compose.yml
 environment:
-  GIT_DEPLOY_KEY_SECRET_REF: "" # Empty string disables fetch from secrets manager
   GIT_SSH_KEY_PATH: /.ssh/composeflux_id_rsa # Where the key will be mounted
 
 volumes:
   - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
 ```
 
-This bypasses the secrets manager for SSH keys entirely. Useful if you manage SSH keys separately or don't want to store them in Bitwarden/Infisical.
+This bypasses the secrets manager for SSH keys entirely. Useful if you manage SSH keys separately or don't want to store
+them in Bitwarden/Infisical.
 
 ## Test SSH Access
 

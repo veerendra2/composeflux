@@ -38,7 +38,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 		}
 	}
 
-	slog.Info("Starting reconciliation", "git_poll_interval", r.gitInterval)
+	slog.Info("Starting reconciliation")
 
 	for {
 		select {

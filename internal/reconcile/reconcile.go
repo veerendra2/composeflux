@@ -9,16 +9,11 @@ import (
 	"github.com/veerendra2/composeflux/pkg/source"
 )
 
-type Timers struct {
+type Config struct {
+	StackPath           string        `name:"stack-path" help:"Path to compose stack directory in git repository" env:"STACK_PATH" required:"" group:"Reconciler Options:"`
+	ConfigFile          string        `name:"config-file" help:"Stack configuration file name" env:"CONFIG_FILE" default:"stack.yml" group:"Reconciler Options:"`
 	GitInterval         time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
 	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
-}
-
-type Config struct {
-	StackPath  string `name:"stack-path" help:"Path to compose stack directory in git repository" env:"STACK_PATH" required:"" group:"Reconciler Options:"`
-	ConfigFile string `name:"config-file" help:"Stack configuration file name" env:"CONFIG_FILE" default:"stack.yml" group:"Reconciler Options:"`
-
-	Timers Timers `embed:"" group:"Reconciler Options:"`
 }
 
 type Reconciler struct {
@@ -43,8 +38,8 @@ func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dock
 		configFile: cfg.ConfigFile,
 		stackPath:  cfg.StackPath,
 
-		gitInterval:         cfg.Timers.GitInterval,
-		imageUpdateSchedule: cfg.Timers.ImageUpdateSchedule,
+		gitInterval:         cfg.GitInterval,
+		imageUpdateSchedule: cfg.ImageUpdateSchedule,
 
 		dClient: dClient,
 		gClient: gClient,
