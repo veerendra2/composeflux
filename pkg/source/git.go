@@ -130,7 +130,7 @@ func New(cfg Config) (Client, error) {
 	repo, err := git.PlainOpen(cfg.ClonePath)
 	if err != nil {
 		if errors.Is(err, git.ErrRepositoryNotExists) {
-			slog.Info("Cloning repository", "url", cfg.RepoURL, "branch", cfg.Branch)
+			slog.Info("Cloning repository", "url", cfg.RepoURL, "branch", cfg.Branch, "path", cfg.ClonePath)
 			repo, err = git.PlainClone(cfg.ClonePath, false, &git.CloneOptions{
 				URL:           cfg.RepoURL,
 				Auth:          sshAuth,
@@ -143,7 +143,7 @@ func New(cfg Config) (Client, error) {
 			return nil, fmt.Errorf("failed to open repository: %w", err)
 		}
 	} else {
-		slog.Info("Opened existing repository", "url", cfg.RepoURL, "branch", cfg.Branch)
+		slog.Info("Opened existing repository", "url", cfg.RepoURL, "branch", cfg.Branch, "path", cfg.ClonePath)
 		branchRef := plumbing.NewBranchReferenceName(cfg.Branch)
 		w, err := repo.Worktree()
 		if err != nil {
