@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 )
@@ -15,6 +16,7 @@ type slogWriter struct {
 	level   slog.Level
 	buf     bytes.Buffer
 	maxSize int // Maximum buffer size in bytes
+	logHook *slogHook
 }
 
 func (w *slogWriter) Write(p []byte) (int, error) {
@@ -39,7 +41,11 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 			break
 		}
 		if msg := strings.TrimSpace(line); msg != "" {
-			slog.Log(context.TODO(), w.level, msg, "source", "docker-sdk")
+			attrs := []any{"source", "docker-sdk"}
+			if name := w.logHook.getStackName(); name != "" {
+				attrs = append(attrs, "stack_name", name)
+			}
+			slog.Log(context.TODO(), w.level, msg, attrs...)
 		}
 	}
 
@@ -47,7 +53,22 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 }
 
 // slogHook forwards logrus logs to slog.
-type slogHook struct{}
+type slogHook struct {
+	mu        sync.RWMutex
+	stackName string
+}
+
+func (h *slogHook) setStackName(name string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.stackName = name
+}
+
+func (h *slogHook) getStackName() string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.stackName
+}
 
 func (h *slogHook) Levels() []logrus.Level { return logrus.AllLevels }
 
@@ -59,6 +80,10 @@ func (h *slogHook) Fire(entry *logrus.Entry) error {
 		level = slog.LevelWarn
 	}
 
-	slog.Log(context.TODO(), level, entry.Message)
+	if name := h.getStackName(); name != "" {
+		slog.Log(context.TODO(), level, entry.Message, "stack_name", name)
+	} else {
+		slog.Log(context.TODO(), level, entry.Message)
+	}
 	return nil
 }

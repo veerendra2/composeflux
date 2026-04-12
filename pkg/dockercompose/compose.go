@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/cli"
@@ -43,6 +44,7 @@ type client struct {
 	docker        mobyClient.APIClient
 	dockerCLI     *command.DockerCli
 	removeOrphans bool
+	logHook       *slogHook
 }
 
 type ComposeConfig struct {
@@ -52,6 +54,8 @@ type ComposeConfig struct {
 }
 
 func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error) {
+	c.logHook.setStackName(filepath.Base(composeCfg.WorkingDir))
+	defer c.logHook.setStackName("")
 	return c.compose.LoadProject(ctx, api.ProjectLoadOptions{
 		ConfigPaths: composeCfg.ComposeFiles,
 		WorkingDir:  composeCfg.WorkingDir,
@@ -222,11 +226,12 @@ func New(cfg Config) (Client, error) {
 	// Redirect Docker SDK's logrus output to slog
 	logrus.SetOutput(io.Discard)
 	logrus.SetLevel(logrus.WarnLevel)
-	logrus.AddHook(&slogHook{})
+	hook := &slogHook{}
+	logrus.AddHook(hook)
 
 	dockerCLI, err := command.NewDockerCli(
-		command.WithOutputStream(&slogWriter{level: slog.LevelInfo, maxSize: 1024 * 1024}), // 1MB limit
-		command.WithErrorStream(&slogWriter{level: slog.LevelWarn, maxSize: 1024 * 1024}),  // 1MB limit
+		command.WithOutputStream(&slogWriter{level: slog.LevelInfo, maxSize: 1024 * 1024, logHook: hook}), // 1MB limit
+		command.WithErrorStream(&slogWriter{level: slog.LevelWarn, maxSize: 1024 * 1024, logHook: hook}),  // 1MB limit
 	)
 	if err != nil {
 		return nil, err
@@ -246,5 +251,6 @@ func New(cfg Config) (Client, error) {
 		docker:        dockerCLI.Client(),
 		dockerCLI:     dockerCLI,
 		removeOrphans: cfg.RemoveOrphans,
+		logHook:       hook,
 	}, nil
 }
