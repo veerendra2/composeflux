@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/docker/compose/v5/pkg/api"
+	"github.com/veerendra2/composeflux/internal/metrics"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
@@ -49,6 +50,7 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 				slog.Warn("Failed to prune stack", "stack_name", stack.Name, "error", err)
 				continue
 			}
+			metrics.StacksPrunedTotal.WithLabelValues(stack.Name).Inc()
 			prunedStacks = append(prunedStacks, stack.Name)
 		}
 	}
