@@ -15,9 +15,9 @@ services:
       # Git Source Configuration
       GIT_REPO_URL: ${GIT_REPO_URL}
       GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
-      # GIT_BRANCH: main
+      GIT_BRANCH: ${GIT_BRANCH}
       # GIT_CLONE_PATH: /opt/compose-stack
-      # GIT_SSH_KEY_PATH: /.ssh/composeflux_id_rsa
+      GIT_SSH_KEY_PATH: ${GIT_SSH_KEY_PATH}
 
       # Logging
       LOG_ADD_SOURCE: ${LOG_ADD_SOURCE}
@@ -38,8 +38,11 @@ services:
       # INFISICAL_SECRET_PATH: /
       # INFISICAL_SITE_URL: https://app.infisical.com
     hostname: composeflux
+    ports:
+      - 9090:9090
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ~/.ssh/composeflux_id_rsa:/tmp/composeflux_id_rsa
       - compose-stack:/opt/compose-stack
 volumes:
   compose-stack:

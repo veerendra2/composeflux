@@ -18,3 +18,4 @@ and automatically deploy your Docker stacks—all without manual intervention.
 - **Flexible Configuration** - Startup order and shared environment variables
 - **Automatic Image Updates** - Scheduled registry checks redeploy stacks when newer images are available
 - **Simple & Headless** - No UI, no backend database
+- **Prometheus Metrics** - Built-in metrics endpoint for deployment, image update, and prune observability

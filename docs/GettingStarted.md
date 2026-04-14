@@ -59,6 +59,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `LOG_LEVEL`                 | Log level (`debug`/`info`/`warn`/`error`)                                                                                     | `info`                     |
 | `LOG_FORMAT`                | Log format (`console`/`json`)                                                                                                 | `console`                  |
 | `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
+| `METRICS_ADDR`              | Prometheus metrics listen address (e.g., `:9090`). Empty to disable. Only applies to `run` command.                           | `:9090`                    |
 
 ## Commands
 
@@ -173,6 +174,12 @@ services:
       # Logging
       # LOG_LEVEL: info
       # LOG_FORMAT: console           # console or json
+
+      # Metrics
+      # METRICS_ADDR: ":9090"         # Prometheus metrics endpoint, empty to disable
+
+    ports:
+      - "9090:9090"                    # Prometheus metrics
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
