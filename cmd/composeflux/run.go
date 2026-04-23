@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,13 +28,21 @@ func (r *RunCmd) Run() error {
 	defer cleanup()
 
 	if r.MetricsAddr != "" {
+		ln, err := net.Listen("tcp", r.MetricsAddr)
+		if err != nil {
+			return fmt.Errorf("metrics server failed to bind %s: %w", r.MetricsAddr, err)
+		}
+
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		srv := &http.Server{Addr: r.MetricsAddr, Handler: mux}
+		srv := &http.Server{
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
 
 		go func() {
 			slog.Info("Starting metrics server", "addr", r.MetricsAddr)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 				slog.Error("Metrics server failed", "error", err)
 			}
 		}()
