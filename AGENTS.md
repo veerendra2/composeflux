@@ -178,6 +178,16 @@ ctx.FatalIfErrorf(ctx.Run())
 
 ---
 
+## Observability
+
+- Prometheus metrics defined in `internal/metrics/metrics.go` using `promauto.NewCounterVec`.
+- All counters use `stack_name` as the sole label to avoid high cardinality.
+- Metrics are incremented in reconciler paths (`Sync`, `SyncImages`, `Prune`) — never in the Docker Compose client layer.
+- The `/metrics` HTTP endpoint is served from `cmd/composeflux/run.go` (daemon mode only).
+- Grafana dashboard JSON lives in `docs/dashboards/` with a `${DS_PROMETHEUS}` variable datasource for portability.
+
+---
+
 ## CI / GitHub Actions
 
 - **`ci.yml`**: Runs `golangci-lint` on all pull requests. Run `task lint` locally before opening a PR.
