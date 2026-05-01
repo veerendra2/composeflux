@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
+	"github.com/veerendra2/composeflux/internal/metrics"
 )
 
 // SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
@@ -46,12 +47,17 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 			continue
 		}
 
+		metrics.ImageUpdatesTotal.WithLabelValues(project.Name).Inc()
 		if err := r.dClient.Pull(ctx, project); err != nil {
 			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
+			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
+		metrics.DeploymentsTotal.WithLabelValues(project.Name).Inc()
 		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
+			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
+			metrics.DeploymentFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
@@ -167,8 +173,10 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 
 	for _, stackName := range deployOrder {
 		if project, exists := toDeploy[stackName]; exists {
+			metrics.DeploymentsTotal.WithLabelValues(stackName).Inc()
 			if err := r.Deploy(ctx, project); err != nil {
 				slog.Warn("Failed to deploy the stack", "stack_name", stackName, "error", err)
+				metrics.DeploymentFailuresTotal.WithLabelValues(stackName).Inc()
 				continue
 			}
 			slog.Info("Successfully deployed the stack", "stack_name", stackName)

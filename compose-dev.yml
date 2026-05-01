@@ -15,9 +15,12 @@ services:
       # Git Source Configuration
       GIT_REPO_URL: ${GIT_REPO_URL}
       GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
-      # GIT_BRANCH: main
+      GIT_BRANCH: ${GIT_BRANCH:-main}
       # GIT_CLONE_PATH: /opt/compose-stack
-      # GIT_SSH_KEY_PATH: /.ssh/composeflux_id_rsa
+      GIT_SSH_KEY_PATH: ${GIT_SSH_KEY_PATH:-/.ssh/composeflux_id_rsa}
+
+      # Metrics
+      METRICS_ADDR: ":9090"
 
       # Logging
       LOG_ADD_SOURCE: ${LOG_ADD_SOURCE}
@@ -38,9 +41,65 @@ services:
       # INFISICAL_SECRET_PATH: /
       # INFISICAL_SITE_URL: https://app.infisical.com
     hostname: composeflux
+    ports:
+      - 9090:9090
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ~/.ssh/composeflux_id_rsa:/tmp/composeflux_id_rsa
       - compose-stack:/opt/compose-stack
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    configs:
+      - source: prometheus-config
+        target: /etc/prometheus/prometheus.yml
+    ports:
+      - 9091:9090
+    depends_on:
+      - composeflux
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    configs:
+      - source: grafana-datasource
+        target: /etc/grafana/provisioning/datasources/prometheus.yml
+    ports:
+      - 3000:3000
+    depends_on:
+      - prometheus
+
+configs:
+  prometheus-config:
+    content: |
+      global:
+        scrape_interval: 15s
+
+      scrape_configs:
+        - job_name: composeflux
+          static_configs:
+            - targets:
+                - composeflux:9090
+
+  grafana-datasource:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus:9090
+          isDefault: true
+
 volumes:
   compose-stack:
     name: compose-stack

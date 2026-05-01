@@ -14,11 +14,13 @@ ComposeFlux is a Go application that implements a GitOps reconciliation loop for
 ```
 cmd/composeflux/        # Main binary entry point (CLI setup via kong)
 cmd/prune-playground/   # Dev scratch binary
+internal/metrics/       # Prometheus metric definitions (promauto counters)
 internal/reconcile/     # Core reconciliation logic (private to module)
 pkg/dockercompose/      # Docker Compose SDK wrapper (exported)
 pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical) — optional
 pkg/source/             # Git client (go-git)
 docs/                   # MkDocs documentation
+docs/dashboards/        # Grafana dashboard JSON and screenshot
 ```
 
 ---
@@ -173,6 +175,16 @@ ctx.FatalIfErrorf(ctx.Run())
 
 - Every package exposes `New(...)` returning `(Interface, error)` or `(*Type, error)`.
 - Constructors perform all initialisation: auth, connection setup, validation.
+
+---
+
+## Observability
+
+- Prometheus metrics defined in `internal/metrics/metrics.go` using `promauto.NewCounterVec`.
+- All counters use `stack_name` as the sole label to avoid high cardinality.
+- Metrics are incremented in reconciler paths (`Sync`, `SyncImages`, `Prune`) — never in the Docker Compose client layer.
+- The `/metrics` HTTP endpoint is served from `cmd/composeflux/run.go` (daemon mode only).
+- Grafana dashboard JSON lives in `docs/dashboards/` with a `${DS_PROMETHEUS}` variable datasource for portability.
 
 ---
 

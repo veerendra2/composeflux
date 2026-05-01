@@ -1,7 +1,19 @@
 package main
 
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
 type RunCmd struct {
 	CommonConfig `embed:""`
+	MetricsAddr  string `name:"metrics-addr" help:"Prometheus metrics listen address. Empty to disable." env:"METRICS_ADDR" default:":9090" group:"Metrics Options:"`
 }
 
 func (r *RunCmd) AfterApply() error {
@@ -14,6 +26,36 @@ func (r *RunCmd) Run() error {
 		return err
 	}
 	defer cleanup()
+
+	if r.MetricsAddr != "" {
+		ln, err := net.Listen("tcp", r.MetricsAddr)
+		if err != nil {
+			return fmt.Errorf("metrics server failed to bind %s: %w", r.MetricsAddr, err)
+		}
+
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		srv := &http.Server{
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+
+		go func() {
+			slog.Info("Starting metrics server", "addr", r.MetricsAddr)
+			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+				slog.Error("Metrics server failed", "error", err)
+			}
+		}()
+
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				slog.Error("Metrics server shutdown failed", "error", err)
+			}
+			slog.Info("Metrics server stopped")
+		}()
+	}
 
 	rClient.Run(ctx)
 	return nil
