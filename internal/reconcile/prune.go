@@ -60,7 +60,7 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 	}
 
 	// Prune unused Docker resources (containers, images, volumes, networks, build cache)
-	if r.pruneImages {
+	if r.pruneResources {
 		r.dClient.Prune(ctx)
 	}
 

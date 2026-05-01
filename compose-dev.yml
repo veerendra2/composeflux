@@ -15,9 +15,9 @@ services:
       # Git Source Configuration
       GIT_REPO_URL: ${GIT_REPO_URL}
       GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
-      GIT_BRANCH: ${GIT_BRANCH}
+      GIT_BRANCH: ${GIT_BRANCH:-main}
       # GIT_CLONE_PATH: /opt/compose-stack
-      GIT_SSH_KEY_PATH: ${GIT_SSH_KEY_PATH}
+      GIT_SSH_KEY_PATH: ${GIT_SSH_KEY_PATH:-/.ssh/composeflux_id_rsa}
 
       # Metrics
       METRICS_ADDR: ":9090"

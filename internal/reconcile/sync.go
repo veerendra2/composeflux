@@ -53,9 +53,11 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
+		metrics.DeploymentsTotal.WithLabelValues(project.Name).Inc()
 		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
+			metrics.DeploymentFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)

@@ -14,7 +14,7 @@ type Config struct {
 	ConfigFile          string        `name:"config-file" help:"Stack configuration file name" env:"CONFIG_FILE" default:"stack.yml" group:"Reconciler Options:"`
 	GitInterval         time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
 	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
-	PruneImages         bool          `name:"prune-images" help:"Prune all unused Docker images during cleanup" env:"PRUNE_IMAGES" default:"true" group:"Reconciler Options:"`
+	PruneResources bool `name:"prune-resources" help:"Prune all unused Docker resources (containers, images, volumes, networks, build cache) during cleanup" env:"PRUNE_RESOURCES" default:"true" group:"Reconciler Options:"`
 }
 
 type Reconciler struct {
@@ -23,7 +23,7 @@ type Reconciler struct {
 
 	gitInterval         time.Duration
 	imageUpdateSchedule string
-	pruneImages         bool
+	pruneResources bool
 
 	dClient dockercompose.Client
 	gClient source.Client
@@ -42,7 +42,7 @@ func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dock
 
 		gitInterval:         cfg.GitInterval,
 		imageUpdateSchedule: cfg.ImageUpdateSchedule,
-		pruneImages:         cfg.PruneImages,
+		pruneResources: cfg.PruneResources,
 
 		dClient: dClient,
 		gClient: gClient,
