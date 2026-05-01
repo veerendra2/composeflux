@@ -2,6 +2,7 @@
 ![GitHub forks](https://img.shields.io/github/forks/veerendra2/composeflux)
 ![GitHub License](https://img.shields.io/github/license/veerendra2/composeflux)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/veerendra2/composeflux)
+[![Documentation](https://img.shields.io/badge/docs-veerendra2.github.io%2Fcomposeflux-blue?logo=readthedocs)](https://veerendra2.github.io/composeflux/)
 
 # ComposeFlux
 
@@ -18,20 +19,17 @@ and automatically deploy your Docker stacks—all without manual intervention.
 
 ## Features
 
-- **GitOps Driven** - Automatic deployment from Git repository
-- **Smart Change Detection** - Hash-based detection deploys only changed stacks
-- **Pure Go Implementation** - Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/) without shell
-  execution
-- **Secrets Management** - Optional Bitwarden Secrets Manager and Infisical support
-- **Automatic Image Updates** - Scheduled registry checks redeploy stacks when newer images are available
-- **Flexible Configuration** - Startup order and shared environment variables
-- **Simple & Headless** - No UI, no backend database
-- **Prometheus Metrics** - Built-in metrics endpoint for deployment, image update, and prune observability
-
-## Documentation
-
-- 📖 [**Introduction**](https://veerendra2.github.io/composeflux/Introduction/)
-- 🚀 [**Getting Started**](https://veerendra2.github.io/composeflux/GettingStarted/)
+| Feature | Description |
+| ------- | ----------- |
+| GitOps Driven | Automatic deployment from Git repository |
+| Smart Change Detection | Hash-based detection deploys only changed stacks |
+| Pure Go Implementation | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/) without shell execution |
+| Secrets Management | Optional Bitwarden Secrets Manager and Infisical support |
+| Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available |
+| Flexible Configuration | Startup order and shared environment variables |
+| Prometheus Metrics | Built-in metrics endpoint for deployment, image update, and prune observability |
+| Grafana Dashboard | Pre-built dashboard for deployment and image update visibility |
+| Simple & Headless | No UI, no backend database |
 
 ## Contributing
 

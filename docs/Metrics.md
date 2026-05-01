@@ -16,6 +16,6 @@ ComposeFlux exposes Prometheus metrics on the address configured via `METRICS_AD
 
 A pre-built Grafana dashboard is available at [`docs/dashboards/grafana-dashboard.json`](dashboards/grafana-dashboard.json).
 
-Import it via Grafana UI (**Dashboards → Import → Upload JSON file**) or use the [Grafana HTTP API](https://grafana.com/docs/grafana/latest/developers/http_api/dashboard/#create--update-dashboard).
+Import it via Grafana UI (**Dashboards → Import → Upload JSON file**).
 
 ![ComposeFlux Dashboard](dashboards/dashboard.png)

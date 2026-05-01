@@ -11,11 +11,14 @@ and automatically deploy your Docker stacks—all without manual intervention.
 
 ## Features
 
-- **GitOps Driven** - Automatic deployment from Git repository
-- **Smart Change Detection** - Hash-based detection deploys only changed stacks
-- **Pure Go Implementation** - Native Docker Compose SDK without shell execution
-- **Secrets Management** - Optional Bitwarden Secrets Manager and Infisical support
-- **Flexible Configuration** - Startup order and shared environment variables
-- **Automatic Image Updates** - Scheduled registry checks redeploy stacks when newer images are available
-- **Simple & Headless** - No UI, no backend database
-- **Prometheus Metrics** - Built-in metrics endpoint for deployment, image update, and prune observability
+| Feature | Description |
+| ------- | ----------- |
+| GitOps Driven | Automatic deployment from Git repository |
+| Smart Change Detection | Hash-based detection deploys only changed stacks |
+| Pure Go Implementation | Native Docker Compose SDK without shell execution |
+| Secrets Management | Optional Bitwarden Secrets Manager and Infisical support |
+| Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available |
+| Flexible Configuration | Startup order and shared environment variables |
+| Prometheus Metrics | Built-in metrics endpoint for deployment, image update, and prune observability |
+| Grafana Dashboard | Pre-built dashboard for deployment and image update visibility |
+| Simple & Headless | No UI, no backend database |

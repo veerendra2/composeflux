@@ -13,6 +13,7 @@ nav:
   - Home: index.md
   - Introduction: Introduction.md
   - Getting Started: GettingStarted.md
+  - Metrics: Metrics.md
   - Development: Development.md
   - How-to Guides:
       - Bitwarden Secrets Manager Setup: how-to-guides/Bitwarden.md
