@@ -59,7 +59,12 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `LOG_LEVEL`                 | Log level (`debug`/`info`/`warn`/`error`)                                                                                     | `info`                     |
 | `LOG_FORMAT`                | Log format (`console`/`json`)                                                                                                 | `console`                  |
 | `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
-| `METRICS_ADDR`              | Prometheus metrics listen address (e.g., `:9090`). Empty to disable. Only applies to `run` command.                           | `:9090`                    |
+| `REMOVE_ORPHANS`            | Remove orphan containers during deploy                                                                                        | `true`                     |
+| `PRUNE_IMAGES`              | Prune all unused Docker images during cleanup                                                                                 | `true`                     |
+| `METRICS_ADDR`              | Prometheus metrics listen address. Empty to disable.                                                                          | `:9090`                    |
+
+> [!WARNING]
+> When `PRUNE_IMAGES=true`, pruning removes **all unused Docker images** (equivalent to `docker image prune -a`). Any image not used by a running container will be deleted.
 
 ## Commands
 

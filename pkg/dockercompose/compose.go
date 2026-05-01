@@ -87,7 +87,9 @@ func (c *client) Prune(ctx context.Context) {
 		slog.Warn("Failed to prune containers", "error", err)
 	}
 
-	if _, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{Filters: f}); err != nil {
+	pruneAllFilter := mobyClient.Filters{}
+	pruneAllFilter.Add("dangling", "false")
+	if _, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{Filters: pruneAllFilter}); err != nil {
 		slog.Warn("Failed to prune images", "error", err)
 	}
 

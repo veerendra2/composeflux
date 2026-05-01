@@ -14,11 +14,13 @@ ComposeFlux is a Go application that implements a GitOps reconciliation loop for
 ```
 cmd/composeflux/        # Main binary entry point (CLI setup via kong)
 cmd/prune-playground/   # Dev scratch binary
+internal/metrics/       # Prometheus metric definitions (promauto counters)
 internal/reconcile/     # Core reconciliation logic (private to module)
 pkg/dockercompose/      # Docker Compose SDK wrapper (exported)
 pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical) — optional
 pkg/source/             # Git client (go-git)
 docs/                   # MkDocs documentation
+docs/dashboards/        # Grafana dashboard JSON and screenshot
 ```
 
 ---
