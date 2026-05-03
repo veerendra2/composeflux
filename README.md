@@ -35,6 +35,13 @@ and automatically deploy your Docker stacks—all without manual intervention.
 | Prometheus Metrics | Built-in metrics endpoint for deployment, image update, and prune observability |
 | Simple & Headless | No UI, no backend database |
 
+## Blog Posts
+
+- [GitOps for Homeservers (Part 1) — My Homeservers, Ansible, and the Pain Points](https://veerendra2.github.io/gitops-for-homeservers-part1)
+- [GitOps for Homeservers (Part 2) — Searching for the Right Tool](https://veerendra2.github.io/gitops-for-homeservers-part2)
+- [GitOps for Homeservers (Part 3) — ComposeFlux: A Lightweight GitOps Tool](https://veerendra2.github.io/gitops-for-homeservers-part3)
+- [How I Manage My Homeservers with GitOps and Docker Compose](https://medium.com/p/1da41b3680a4) (Medium)
+
 ## Contributing
 
 Contributions are welcome! Please see our [Development Guide](https://veerendra2.github.io/composeflux/Development/) for
