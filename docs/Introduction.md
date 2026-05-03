@@ -118,6 +118,15 @@ Server 1 (homeserver-1)          Server 2 (homeserver-2)
 
 Each ComposeFlux instance only manages stacks in its configured directory.
 
+## Blog Posts
+
+To learn more about the motivation behind ComposeFlux and see it in action:
+
+- [GitOps for Homeservers (Part 1) — My Homeservers, Ansible, and the Pain Points](https://veerendra2.github.io/gitops-for-homeservers-part1)
+- [GitOps for Homeservers (Part 2) — Searching for the Right Tool](https://veerendra2.github.io/gitops-for-homeservers-part2)
+- [GitOps for Homeservers (Part 3) — ComposeFlux: A Lightweight GitOps Tool](https://veerendra2.github.io/gitops-for-homeservers-part3)
+- [How I Manage My Homeservers with GitOps and Docker Compose](https://medium.com/p/1da41b3680a4) (Medium)
+
 ## Limitations
 
 - Nested stack discovery (only scans one level deep)
