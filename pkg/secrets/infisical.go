@@ -38,7 +38,6 @@ func (c *infisicalClient) Get(key string) (string, error) {
 		if err == nil {
 			return secret.SecretValue, nil
 		}
-		slog.Warn("Failed to retrieve secret from path", "key", key, "path", path, "error", err)
 	}
 
 	return "", fmt.Errorf("secret %q not found in any configured path", key)
