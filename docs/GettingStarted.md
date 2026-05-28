@@ -36,14 +36,14 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 **Infisical (when `SECRETS_PROVIDER=infisical`):**
 
-| Variable                  | Description                      | Default                     |
-| ------------------------- | -------------------------------- | --------------------------- |
-| `INFISICAL_CLIENT_ID`     | Universal Auth client ID         |                             |
-| `INFISICAL_CLIENT_SECRET` | Universal Auth client secret     |                             |
-| `INFISICAL_ENVIRONMENT`   | Environment slug (e.g., `prod`)  |                             |
-| `INFISICAL_PROJECT_ID`    | Project ID                       |                             |
-| `INFISICAL_SITE_URL`      | Infisical site URL               | `https://app.infisical.com` |
-| `INFISICAL_SECRET_PATH`   | Secret path in Infisical project | `/`                         |
+| Variable                  | Description                                                       | Default                     |
+| ------------------------- | ----------------------------------------------------------------- | --------------------------- |
+| `INFISICAL_CLIENT_ID`     | Universal Auth client ID                                          |                             |
+| `INFISICAL_CLIENT_SECRET` | Universal Auth client secret                                      |                             |
+| `INFISICAL_ENVIRONMENT`   | Environment slug (e.g., `prod`)                                   |                             |
+| `INFISICAL_PROJECT_ID`    | Project ID                                                        |                             |
+| `INFISICAL_SITE_URL`      | Infisical site URL                                                | `https://app.infisical.com` |
+| `INFISICAL_SECRET_PATH`   | Secret path in Infisical project. Supports comma-separated paths (e.g., `/generic,/apps/prod`). If the same secret exists in multiple paths, the last path's value takes precedence. | `/`                         |
 
 ### Optional
 
