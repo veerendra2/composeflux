@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	infisical "github.com/infisical/go-sdk"
@@ -27,7 +28,6 @@ type infisicalClient struct {
 
 // Get retrieves a secret value by secret key.
 func (c *infisicalClient) Get(key string) (string, error) {
-	var lastErr error
 	for _, path := range c.secretPaths {
 		secret, err := c.infClient.Secrets().Retrieve(infisical.RetrieveSecretOptions{
 			SecretKey:   key,
@@ -38,15 +38,17 @@ func (c *infisicalClient) Get(key string) (string, error) {
 		if err == nil {
 			return secret.SecretValue, nil
 		}
-		lastErr = err
+		slog.Warn("Failed to retrieve secret from path", "key", key, "path", path, "error", err)
 	}
 
-	return "", lastErr
+	return "", fmt.Errorf("secret %q not found in any configured path", key)
 }
 
 // FetchAll retrieves all secrets.
 func (c *infisicalClient) FetchAll() ([]Secret, error) {
 	var result []Secret
+	var hasSuccess bool
+
 	for _, path := range c.secretPaths {
 		listResult, err := c.infClient.Secrets().ListSecrets(infisical.ListSecretsOptions{
 			Environment: c.environment,
@@ -54,15 +56,22 @@ func (c *infisicalClient) FetchAll() ([]Secret, error) {
 			SecretPath:  path,
 		})
 		if err != nil {
-			return nil, err
+			slog.Warn("Failed to fetch secrets from path", "path", path, "error", err)
+			continue
 		}
 
+		hasSuccess = true
+		slog.Debug("Fetched secrets from path", "path", path, "count", len(listResult.Secrets))
 		for _, secret := range listResult.Secrets {
 			result = append(result, Secret{
 				Key:   secret.SecretKey,
 				Value: secret.SecretValue,
 			})
 		}
+	}
+
+	if !hasSuccess {
+		return nil, fmt.Errorf("failed to fetch secrets from all configured paths")
 	}
 
 	return result, nil

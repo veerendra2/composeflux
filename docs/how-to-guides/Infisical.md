@@ -40,8 +40,19 @@ Add secrets in the project environment you selected:
 ### 4. Create Folders (Optional)
 
 Infisical supports organizing secrets in folders. If you use folders, set `INFISICAL_SECRET_PATH` to the folder path
-used by ComposeFlux. You can also provide a comma-separated list of paths to aggregate secrets from multiple folders
-(e.g., `/generic,/apps/prod`).
+used by ComposeFlux. 
+
+You can also provide a comma-separated list of paths to aggregate secrets from multiple folders
+(e.g., `/generic,/apps/prod`). This is useful for organizing shared secrets separately from environment-specific ones.
+
+**Path behavior:**
+- Secrets are fetched from all specified paths
+- If a path is inaccessible, a warning is logged and other paths are still processed
+- If all paths fail, the operation fails
+- If the same secret key exists in multiple paths, the last path's value takes precedence
+
+**Example use case:** Use `/generic` for shared secrets (database credentials, API keys) and `/apps/prod` for 
+production-specific overrides (values in `/apps/prod` will override those in `/generic`).
 
 1. In the **Overview** tab, click **Add Secrets** and select **Add Folder**.
 2. Note the folder path (for example, `/`, `/apps/prod`).
