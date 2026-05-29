@@ -16,57 +16,6 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 	return len(containers) > 0 && containers[0].Labels[LabelManaged] == ManagedValue
 }
 
-// Prune deletes the running stacks which are not in source repo
-func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
-	runningStack, err := r.dClient.List(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Create a map of source stack names
-	srcStackNames := make(map[string]bool)
-	for _, src := range srcStack {
-		srcStackNames[filepath.Base(src.WorkingDir)] = true
-	}
-
-	// Find managed stacks that are not present in source (Git Repo)
-	var prunedStacks []string
-	for _, stack := range runningStack {
-
-		containers, err := r.dClient.Ps(ctx, stack.Name)
-		if err != nil {
-			slog.Error("Failed to get stack", "error", err)
-			continue
-		}
-
-		// Ignore the stack if it's not managed by composeflux
-		if !isManagedStack(containers) {
-			continue
-		}
-
-		// Delete stack which is not in source
-		if !srcStackNames[stack.Name] {
-			if err := r.dClient.Down(ctx, stack.Name); err != nil {
-				slog.Warn("Failed to prune stack", "stack_name", stack.Name, "error", err)
-				continue
-			}
-			metrics.StacksPrunedTotal.WithLabelValues(stack.Name).Inc()
-			prunedStacks = append(prunedStacks, stack.Name)
-		}
-	}
-
-	if len(prunedStacks) > 0 {
-		slog.Info("Pruned stacks", "count", len(prunedStacks), "stack_names", strings.Join(prunedStacks, ","))
-	}
-
-	// Prune unused Docker resources (containers, images, volumes, networks, build cache)
-	if r.pruneResources {
-		r.dClient.Prune(ctx)
-	}
-
-	return nil
-}
-
 type StackStateMap map[string]StackInfo
 
 type StackInfo struct {
@@ -84,7 +33,7 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 	for _, stack := range stacks {
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to get stack", "error", err)
+			slog.Error("Failed to get stack containers", "stack_name", stack.Name, "error", err)
 			continue
 		}
 
@@ -93,9 +42,12 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 			continue
 		}
 
+		// Safety check: ensure containers array is not empty before accessing
 		containerHash := ""
-		if hash, ok := containers[0].Labels[LabelStackHash]; ok {
-			containerHash = hash
+		if len(containers) > 0 {
+			if hash, ok := containers[0].Labels[LabelStackHash]; ok {
+				containerHash = hash
+			}
 		}
 
 		stackStateMap[stack.Name] = StackInfo{
@@ -103,4 +55,58 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 		}
 	}
 	return stackStateMap, nil
+}
+
+// pruneDeletedStacks removes stacks that are managed by ComposeFlux but no longer exist in Git
+func (r *Reconciler) pruneDeletedStacks(ctx context.Context, gitStacks []dockercompose.ComposeConfig) {
+	runningStacks, err := r.dClient.List(ctx)
+	if err != nil {
+		slog.Error("Failed to list running stacks for pruning", "error", err)
+		return
+	}
+
+	// Create a map of Git stack names for quick lookup
+	// Use actual project names from loaded projects, not directory names
+	gitStackNames := make(map[string]bool)
+	for _, composeCfg := range gitStacks {
+		// Load project to get the actual project name (could differ from directory name)
+		project, err := r.dClient.LoadProject(ctx, composeCfg)
+		if err != nil {
+			slog.Warn("Failed to load project for pruning check, using directory name as fallback",
+				"path", composeCfg.WorkingDir, "error", err)
+			// Fallback to directory name if project can't be loaded
+			gitStackNames[filepath.Base(composeCfg.WorkingDir)] = true
+			continue
+		}
+		gitStackNames[project.Name] = true
+	}
+
+	// Find and remove stacks that are managed by ComposeFlux but no longer in Git
+	var prunedStacks []string
+	for _, stack := range runningStacks {
+		containers, err := r.dClient.Ps(ctx, stack.Name)
+		if err != nil {
+			slog.Error("Failed to get stack containers", "stack_name", stack.Name, "error", err)
+			continue
+		}
+
+		// Skip stacks not managed by ComposeFlux
+		if !isManagedStack(containers) {
+			continue
+		}
+
+		// Remove stack if it's not in Git anymore
+		if !gitStackNames[stack.Name] {
+			if err := r.dClient.Down(ctx, stack.Name); err != nil {
+				slog.Warn("Failed to remove deleted stack", "stack_name", stack.Name, "error", err)
+				continue
+			}
+			metrics.StacksPrunedTotal.WithLabelValues(stack.Name).Inc()
+			prunedStacks = append(prunedStacks, stack.Name)
+		}
+	}
+
+	if len(prunedStacks) > 0 {
+		slog.Info("Removed stacks deleted from Git", "count", len(prunedStacks), "stack_names", strings.Join(prunedStacks, ","))
+	}
 }

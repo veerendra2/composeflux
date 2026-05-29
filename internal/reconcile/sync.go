@@ -31,7 +31,7 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 
 	for _, composeCfg := range composeCfgs {
 		project, err := r.dClient.LoadProject(ctx, composeCfg)
-		if err != nil {
+		if err != nil || project == nil {
 			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
@@ -53,19 +53,18 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
-		metrics.DeploymentsTotal.WithLabelValues(project.Name).Inc()
+
 		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
-			metrics.DeploymentFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
 	}
 
-	// Prune stacks which are not in Git repo
-	if err := r.Prune(ctx, composeCfgs); err != nil {
-		slog.Error("Failed to prune stacks", "error", err)
+	// Prune unused Docker resources (old image layers, dangling volumes, etc.)
+	if r.pruneResources {
+		r.dClient.Prune(ctx)
 	}
 
 	return nil
@@ -121,7 +120,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	// Check hash and determine which stacks are changed and deploy those
 	for _, composeCfg := range composeCfgs {
 		project, err := r.dClient.LoadProject(ctx, composeCfg)
-		if err != nil {
+		if err != nil || project == nil {
 			slog.Warn("Skipping, failed to load project", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
@@ -183,9 +182,16 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		}
 	}
 
-	// Prune stacks which are not in Git repo
-	if err := r.Prune(ctx, composeCfgs); err != nil {
-		slog.Error("Failed to prune stacks", "error", err)
+	// Prune stacks that were deleted from Git
+	if len(composeCfgs) == 0 {
+		slog.Warn("No stacks discovered in Git repository, skipping pruning to prevent accidental deletion of all stacks")
+	} else {
+		r.pruneDeletedStacks(ctx, composeCfgs)
+	}
+
+	// Prune unused Docker resources (old image layers, dangling volumes, etc.)
+	if r.pruneResources {
+		r.dClient.Prune(ctx)
 	}
 
 	return nil
