@@ -81,11 +81,15 @@ func (c *client) List(ctx context.Context) ([]api.Stack, error) {
 }
 
 func (c *client) Prune(ctx context.Context) {
-	f := mobyClient.Filters{}
-
-	if _, err := c.docker.ContainerPrune(ctx, mobyClient.ContainerPruneOptions{Filters: f}); err != nil {
-		slog.Warn("Failed to prune containers", "error", err)
-	}
+	// ContainerPrune is disabled because it removes ALL stopped containers,
+	// including those from paused stacks (composeflux.reconciliation.pause=true).
+	// ComposeFlux manages containers via Down() in the Prune() function instead.
+	// See: https://github.com/veerendra2/composeflux/issues/22
+	//
+	// f := mobyClient.Filters{}
+	// if _, err := c.docker.ContainerPrune(ctx, mobyClient.ContainerPruneOptions{Filters: f}); err != nil {
+	// 	slog.Warn("Failed to prune containers", "error", err)
+	// }
 
 	pruneAllFilter := mobyClient.Filters{}
 	pruneAllFilter.Add("dangling", "false")
@@ -97,7 +101,8 @@ func (c *client) Prune(ctx context.Context) {
 		slog.Warn("Failed to prune volumes", "error", err)
 	}
 
-	if _, err := c.docker.NetworkPrune(ctx, mobyClient.NetworkPruneOptions{Filters: f}); err != nil {
+	networkFilter := mobyClient.Filters{}
+	if _, err := c.docker.NetworkPrune(ctx, mobyClient.NetworkPruneOptions{Filters: networkFilter}); err != nil {
 		slog.Warn("Failed to prune networks", "error", err)
 	}
 
