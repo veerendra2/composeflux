@@ -140,6 +140,24 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 				toDeploy[project.Name] = project
 			}
 		} else {
+			// Stack not in currentStackMap - could be new or all containers stopped
+			// Check if stack exists with stopped containers
+			containers, err := r.dClient.Ps(ctx, project.Name)
+			if err == nil && len(containers) > 0 {
+				// Stack exists with containers, check if all are stopped
+				allStopped := true
+				for _, c := range containers {
+					if c.State == "running" {
+						allStopped = false
+						break
+					}
+				}
+				if allStopped {
+					slog.Info("Stack has all containers stopped, skipping deployment", "stack_name", project.Name)
+					continue
+				}
+			}
+			// Stack is truly new or has some running containers
 			slog.Info("New stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 		}
