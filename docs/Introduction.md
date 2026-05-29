@@ -41,6 +41,71 @@ ComposeFlux uses a hash-based approach to decide whether a stack needs redeployi
 - Stack is redeployed only when the hash changes; otherwise it is skipped (no unnecessary redeployment)
 - Hash is stored in the `composeflux.stack-hash` label on deployed containers
 
+## Pausing Reconciliation
+
+You can temporarily pause reconciliation for specific stacks using a label **without modifying Git**. This is useful for:
+
+- Database backups (e.g., Kopia backing up PostgreSQL)
+- Maintenance operations requiring containers to stay stopped
+- Temporary exclusion from automated deployments
+
+**Label:** `composeflux.reconciliation.pause=true`
+
+When this label is set, ComposeFlux will:
+- ✅ Skip deployment during sync
+- ✅ Skip image updates
+- ✅ Skip pruning (won't remove even if deleted from Git)
+
+### Usage
+
+**Recommended: Add via Docker CLI (no Git changes required)**
+
+```bash
+# Pause reconciliation for a stack
+for container in $(docker ps -aq --filter "label=com.docker.compose.project=immich"); do
+  docker container update --label-add composeflux.reconciliation.pause=true $container
+done
+
+# Resume reconciliation
+for container in $(docker ps -aq --filter "label=com.docker.compose.project=immich"); do
+  docker container update --label-rm composeflux.reconciliation.pause $container
+done
+```
+
+**Example: Pause for backup**
+
+```bash
+# 1. Pause reconciliation
+for container in $(docker ps -aq --filter "label=com.docker.compose.project=immich"); do
+  docker container update --label-add composeflux.reconciliation.pause=true $container
+done
+
+# 2. Stop container for backup
+docker stop immich-postgres-1
+
+# 3. Run backup
+kopia snapshot create /var/lib/postgresql/data
+
+# 4. Resume reconciliation and restart
+for container in $(docker ps -aq --filter "label=com.docker.compose.project=immich"); do
+  docker container update --label-rm composeflux.reconciliation.pause $container
+done
+docker start immich-postgres-1
+```
+
+**Alternative: Add to compose file (permanent pause)**
+
+If you need to permanently pause a stack, you can add the label to the compose file:
+
+```yaml
+name: immich
+labels:
+  composeflux.reconciliation.pause: "true"
+services:
+  postgres:
+    image: postgres:16
+```
+
 ## Stack Configuration
 
 Optional configuration file in the Git repository within the `STACK_PATH` directory that allows you to:
