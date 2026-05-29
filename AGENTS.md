@@ -101,7 +101,7 @@ import (
 | Interfaces | `PascalCase` | `Client` |
 | Exported constants | `PascalCase` | `LabelManaged`, `LabelStackHash` |
 | Unexported constants | `camelCase` | `appName` |
-| Source files | `snake_case.go` | `deploy.go`, `cache.go`, `bitwarden.go` |
+| Source files | `snake_case.go` | `deploy.go`, `config.go`, `bitwarden.go` |
 | Receiver names | Short (1–2 letters) | `r` for `*Reconciler`, `c` for `*client` |
 | Type aliases | `PascalCase` | `type StackStateMap map[string]StackInfo` |
 
@@ -166,10 +166,8 @@ ctx.FatalIfErrorf(ctx.Run())
 
 ### Concurrency
 
-- `cacheMu sync.RWMutex` protects the shared env/secret cache; use `RLock` for reads, `Lock` for writes.
-- `reconcileMu sync.Mutex` serializes `Sync` and `SyncImages` to prevent concurrent cache mutation and partial deployments — lock it as the first action in both methods.
+- `reconcileMu sync.Mutex` serializes `Sync` and `SyncImages` to prevent concurrent execution and partial deployments — lock it as the first action in both methods.
 - `sync.Mutex` / `sync.RWMutex` zero values are ready to use; do not initialise them explicitly in `New()`.
-- Nil cached slices after clearing (`cacheClear`) to fully release memory.
 
 ### Constructor Pattern
 
