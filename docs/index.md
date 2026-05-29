@@ -5,6 +5,7 @@ _A GitOps continuous deployment tool for Docker Compose_
 ![ComposeFlux](./assets/composeflux-banner.png)
 
 <p align="center">
+<a href="https://github.com/veerendra2/composeflux"><img src="https://img.shields.io/badge/GitHub-veerendra2%2Fcomposeflux-blue?style=flat&logo=github" alt="GitHub"></a>
 <img src="https://img.shields.io/github/go-mod/go-version/veerendra2/composeflux?style=flat&logo=go&logoColor=white" alt="Go">
 <img src="https://img.shields.io/github/license/veerendra2/composeflux?style=flat" alt="License">
 <img src="https://img.shields.io/github/stars/veerendra2/composeflux?style=flat&logo=github" alt="Stars">
