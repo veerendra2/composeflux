@@ -13,7 +13,7 @@ import (
 
 // isManagedStack checks if the stack is managed by composeflux via container labels.
 func isManagedStack(containers []api.ContainerSummary) bool {
-	return len(containers) > 0 && containers[0].Labels[LabelManaged] == ManagedValue
+	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ManagedValue
 }
 
 // Prune deletes the running stacks which are not in source repo

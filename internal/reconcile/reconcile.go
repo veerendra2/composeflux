@@ -29,9 +29,6 @@ type Reconciler struct {
 	gClient source.Client
 	sClient secrets.Client
 
-	cache   []string
-	cacheMu sync.RWMutex
-
 	reconcileMu sync.Mutex
 }
 

@@ -4,7 +4,6 @@ package reconcile
 import (
 	"context"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,13 +16,13 @@ import (
 func (r *Reconciler) SyncImages(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
-	defer r.cacheClear()
 
-	if _, err := r.loadCache(); err != nil {
+	envs, _, err := r.loadEnvAndConfig()
+	if err != nil {
 		return err
 	}
 
-	composeCfgs, err := r.discoverComposeStack()
+	composeCfgs, err := r.discoverComposeStack(envs)
 	if err != nil {
 		slog.Error("Failed to discover compose stacks for image update check", "error", err)
 		return err
@@ -75,13 +74,12 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 func (r *Reconciler) Sync(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
-	defer r.cacheClear()
 
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
 	}
 
-	cfg, err := r.loadCache()
+	envs, cfg, err := r.loadEnvAndConfig()
 	if err != nil {
 		return err
 	}
@@ -90,22 +88,23 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		slog.Warn("Stack config not found, continuing without it")
 	}
 
-	// Validate StartupOrder directories exist
-	if cfg != nil && len(cfg.StartupOrder) > 0 {
-		for _, stackName := range cfg.StartupOrder {
-			startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
-			if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
-				slog.Warn("Stack directory in startup_order not found",
-					"startup_order_item", stackName,
-					"expected_path", startupItemDir)
-			}
-		}
-	}
-
 	// Discover compose stacks
-	composeCfgs, err := r.discoverComposeStack()
+	composeCfgs, err := r.discoverComposeStack(envs)
 	if err != nil {
 		return err
+	}
+
+	// Validate StartupOrder items exist in discovered stacks
+	if cfg != nil {
+		discovered := make(map[string]bool)
+		for _, c := range composeCfgs {
+			discovered[filepath.Base(c.WorkingDir)] = true
+		}
+		for _, name := range cfg.StartupOrder {
+			if !discovered[name] {
+				slog.Warn("Stack in startup_order not found in discovered stacks", "startup_order_item", name)
+			}
+		}
 	}
 
 	// Get current running stacks info
@@ -146,41 +145,24 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		}
 	}
 
-	// Create slice to arrange stack array according to StartupOrder
-	// defined in the stack config
-	deployOrder := []string{}
-	if cfg != nil && len(cfg.StartupOrder) > 0 {
-		for _, stackName := range cfg.StartupOrder {
-			// Add StartupOrder first, if the stack in StartupOrder is also in toDeploy
-			if _, exists := toDeploy[stackName]; exists {
-				deployOrder = append(deployOrder, stackName)
-			}
-		}
+	var startupOrder []string
+	if cfg != nil {
+		startupOrder = cfg.StartupOrder
 	}
-
-	// Add remaining stacks (not in StartupOrder)
-	for stackName := range toDeploy {
-		// Only add if not already in deployOrder
-		if !slices.Contains(deployOrder, stackName) {
-			deployOrder = append(deployOrder, stackName)
-		}
-	}
+	deployOrder := orderStacks(toDeploy, startupOrder)
 
 	if len(deployOrder) > 0 {
-		slog.Info("Deploying stacks", "count", len(deployOrder),
-			"order", strings.Join(deployOrder, ","))
+		slog.Info("Deploying stacks", "count", len(deployOrder), "order", strings.Join(deployOrder, ","))
 	}
 
-	for _, stackName := range deployOrder {
-		if project, exists := toDeploy[stackName]; exists {
-			metrics.DeploymentsTotal.WithLabelValues(stackName).Inc()
-			if err := r.Deploy(ctx, project); err != nil {
-				slog.Warn("Failed to deploy the stack", "stack_name", stackName, "error", err)
-				metrics.DeploymentFailuresTotal.WithLabelValues(stackName).Inc()
-				continue
-			}
-			slog.Info("Successfully deployed the stack", "stack_name", stackName)
+	for _, name := range deployOrder {
+		metrics.DeploymentsTotal.WithLabelValues(name).Inc()
+		if err := r.Deploy(ctx, toDeploy[name]); err != nil {
+			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
+			metrics.DeploymentFailuresTotal.WithLabelValues(name).Inc()
+			continue
 		}
+		slog.Info("Successfully deployed the stack", "stack_name", name)
 	}
 
 	// Prune stacks which are not in Git repo
@@ -189,4 +171,26 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// orderStacks arranges stack names according to startupOrder, followed by remaining stacks in alphabetical order.
+func orderStacks(toDeploy map[string]*types.Project, startupOrder []string) []string {
+	var deployOrder []string
+	seen := make(map[string]bool)
+
+	for _, name := range startupOrder {
+		if _, exists := toDeploy[name]; exists {
+			deployOrder = append(deployOrder, name)
+			seen[name] = true
+		}
+	}
+
+	var remaining []string
+	for name := range toDeploy {
+		if !seen[name] {
+			remaining = append(remaining, name)
+		}
+	}
+	slices.Sort(remaining)
+	return append(deployOrder, remaining...)
 }
