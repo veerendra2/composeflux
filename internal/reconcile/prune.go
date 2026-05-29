@@ -16,6 +16,20 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 	return len(containers) > 0 && containers[0].Labels[LabelManaged] == ManagedValue
 }
 
+// isReconciliationPaused checks if the stack has reconciliation paused via label.
+func isReconciliationPaused(containers []api.ContainerSummary) bool {
+	if len(containers) == 0 {
+		return false
+	}
+	// Check if any container has the pause label set to "true"
+	for _, c := range containers {
+		if pauseValue, ok := c.Labels[LabelReconciliationPause]; ok && pauseValue == "true" {
+			return true
+		}
+	}
+	return false
+}
+
 // Prune deletes the running stacks which are not in source repo
 func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
 	runningStack, err := r.dClient.List(ctx)
@@ -41,6 +55,12 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 
 		// Ignore the stack if it's not managed by composeflux
 		if !isManagedStack(containers) {
+			continue
+		}
+
+		// Skip stacks with reconciliation paused
+		if isReconciliationPaused(containers) {
+			slog.Debug("Stack has reconciliation paused, skipping prune", "stack_name", stack.Name)
 			continue
 		}
 

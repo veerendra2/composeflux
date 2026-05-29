@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	LabelAppVersion = "composeflux.version"
-	LabelDeployedAt = "composeflux.deployed-at"
-	LabelManaged    = "composeflux.managed"
-	LabelStackHash  = "composeflux.stack-hash"
-	ManagedValue    = "true"
+	LabelAppVersion          = "composeflux.version"
+	LabelDeployedAt          = "composeflux.deployed-at"
+	LabelManaged             = "composeflux.managed"
+	LabelStackHash           = "composeflux.stack-hash"
+	LabelReconciliationPause = "composeflux.reconciliation.pause"
+	ManagedValue             = "true"
 )
 
 // projectChecksum computes sha256 of docker compose yaml content

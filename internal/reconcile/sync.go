@@ -36,6 +36,13 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 			continue
 		}
 
+		// Check if stack has reconciliation paused
+		containers, err := r.dClient.Ps(ctx, project.Name)
+		if err == nil && isReconciliationPaused(containers) {
+			slog.Info("Stack has reconciliation paused, skipping image update", "stack_name", project.Name)
+			continue
+		}
+
 		hasUpdate, err := r.dClient.HasImageUpdates(ctx, project)
 		if err != nil {
 			slog.Warn("Failed to check image updates", "stack_name", project.Name, "error", err)
@@ -123,6 +130,13 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		project, err := r.dClient.LoadProject(ctx, composeCfg)
 		if err != nil {
 			slog.Warn("Skipping, failed to load project", "path", composeCfg.WorkingDir, "error", err)
+			continue
+		}
+
+		// Check if stack has reconciliation paused
+		containers, err := r.dClient.Ps(ctx, project.Name)
+		if err == nil && isReconciliationPaused(containers) {
+			slog.Info("Stack has reconciliation paused, skipping deployment", "stack_name", project.Name)
 			continue
 		}
 
