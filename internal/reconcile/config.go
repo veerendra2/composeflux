@@ -36,7 +36,6 @@ func (r *Reconciler) loadEnvAndConfig() ([]string, *StackConfig, error) {
 		if !os.IsNotExist(err) {
 			slog.Warn("Failed to load stack config", "path", configPath, "error", err)
 		}
-		cfg = nil
 	}
 
 	var envs []string
