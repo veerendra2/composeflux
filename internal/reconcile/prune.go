@@ -36,7 +36,7 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to get stack", "error", err)
+			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			continue
 		}
 
@@ -85,7 +85,7 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 	for _, stack := range stacks {
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to get stack", "error", err)
+			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			continue
 		}
 

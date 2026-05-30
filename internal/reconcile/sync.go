@@ -123,7 +123,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 
 		sourceHash, err := projectChecksum(project)
 		if err != nil {
-			slog.Warn("Failed to get hash from the running stack, picking for deployment anyways",
+			slog.Warn("Failed to calculate project checksum, deploying stack anyway",
 				"stack_name", project.Name, "error", err)
 			// Deploy anyway if hash calculation fails
 			toDeploy[project.Name] = project
