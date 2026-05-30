@@ -31,16 +31,12 @@ func Load(path string) (*StackConfig, error) {
 // loadEnvAndConfig loads secrets and environment variables from stack.yml statelessly.
 func (r *Reconciler) loadEnvAndConfig() ([]string, *StackConfig, error) {
 	configPath := filepath.Join(r.gClient.Path(), r.stackPath, r.configFile)
-	var cfg *StackConfig
-	var err error
-
-	if _, err = os.Stat(configPath); err == nil {
-		cfg, err = Load(configPath)
-		if err != nil {
-			return nil, nil, err
+	cfg, err := Load(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("Failed to load stack config", "path", configPath, "error", err)
 		}
-	} else if !os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("failed to stat stack config %s: %w", configPath, err)
+		cfg = nil
 	}
 
 	var envs []string
