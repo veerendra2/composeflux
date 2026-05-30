@@ -29,35 +29,31 @@ func Load(path string) (*StackConfig, error) {
 }
 
 // loadEnvAndConfig loads secrets and environment variables from stack.yml statelessly.
-func (r *Reconciler) loadEnvAndConfig() ([]string, *StackConfig, error) {
+func (r *Reconciler) loadEnvAndConfig() ([]string, []string, error) {
+	var envs []string
+	var startupOrder []string
+
 	configPath := filepath.Join(r.gClient.Path(), r.stackPath, r.configFile)
 	cfg, err := Load(configPath)
 	if err != nil {
 		slog.Warn("Failed to load stack config", "path", configPath, "error", err)
+	} else {
+		for key, value := range cfg.Envs {
+			envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+		}
+		startupOrder = cfg.StartupOrder
 	}
 
-	var envs []string
 	if r.sClient != nil {
 		secrets, err := r.sClient.FetchAll()
 		if err != nil {
-			return nil, nil, err
+			return envs, startupOrder, err
 		}
-		slog.Debug("Fetched secrets from secrets manager", "count", len(secrets))
-		envs = make([]string, 0, len(secrets))
+
 		for _, secret := range secrets {
 			envs = append(envs, fmt.Sprintf("%s=%s", secret.Key, secret.Value))
 		}
 	}
 
-	if cfg != nil && len(cfg.Envs) > 0 {
-		slog.Debug("Adding env vars from stack config", "count", len(cfg.Envs))
-		if envs == nil {
-			envs = make([]string, 0, len(cfg.Envs))
-		}
-		for key, value := range cfg.Envs {
-			envs = append(envs, fmt.Sprintf("%s=%s", key, value))
-		}
-	}
-
-	return envs, cfg, nil
+	return envs, startupOrder, nil
 }

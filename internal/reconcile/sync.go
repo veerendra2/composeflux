@@ -4,6 +4,7 @@ package reconcile
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -47,18 +48,19 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 		}
 
 		metrics.ImageUpdatesTotal.WithLabelValues(project.Name).Inc()
+
 		if err := r.dClient.Pull(ctx, project); err != nil {
 			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
-		metrics.DeploymentsTotal.WithLabelValues(project.Name).Inc()
+
 		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
-			metrics.DeploymentFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
+
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
 	}
 
@@ -79,7 +81,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		return err
 	}
 
-	envs, cfg, err := r.loadEnvAndConfig()
+	envs, startupOrder, err := r.loadEnvAndConfig()
 	if err != nil {
 		return err
 	}
@@ -90,16 +92,13 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		return err
 	}
 
-	// Validate StartupOrder items exist in discovered stacks
-	if cfg != nil {
-		discovered := make(map[string]bool)
-		for _, c := range composeCfgs {
-			discovered[filepath.Base(c.WorkingDir)] = true
-		}
-		for _, name := range cfg.StartupOrder {
-			if !discovered[name] {
-				slog.Warn("Stack in startup_order not found in discovered stacks", "startup_order_item", name)
-			}
+	// Validate StartupOrder directories and log warning if not exists
+	for _, stackName := range startupOrder {
+		startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+		if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
+			slog.Warn("Stack directory in startup_order not found",
+				"startup_order_item", stackName,
+				"expected_path", startupItemDir)
 		}
 	}
 
@@ -141,11 +140,24 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		}
 	}
 
-	var startupOrder []string
-	if cfg != nil {
-		startupOrder = cfg.StartupOrder
+	// Create slice to arrange stack array according to StartupOrder
+	// defined in the stack config
+	deployOrder := []string{}
+
+	for _, stackName := range startupOrder {
+		// Add StartupOrder first, if the stack in StartupOrder is also in toDeploy
+		if _, exists := toDeploy[stackName]; exists {
+			deployOrder = append(deployOrder, stackName)
+		}
 	}
-	deployOrder := orderStacks(toDeploy, startupOrder)
+
+	// Add remaining stacks (not in StartupOrder)
+	for stackName := range toDeploy {
+		// Only add if not already in deployOrder
+		if !slices.Contains(deployOrder, stackName) {
+			deployOrder = append(deployOrder, stackName)
+		}
+	}
 
 	if len(deployOrder) > 0 {
 		slog.Info("Deploying stacks", "count", len(deployOrder), "order", strings.Join(deployOrder, ","))
@@ -167,26 +179,4 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// orderStacks arranges stack names according to startupOrder, followed by remaining stacks in alphabetical order.
-func orderStacks(toDeploy map[string]*types.Project, startupOrder []string) []string {
-	var deployOrder []string
-	seen := make(map[string]bool)
-
-	for _, name := range startupOrder {
-		if _, exists := toDeploy[name]; exists && !seen[name] {
-			deployOrder = append(deployOrder, name)
-			seen[name] = true
-		}
-	}
-
-	var remaining []string
-	for name := range toDeploy {
-		if !seen[name] {
-			remaining = append(remaining, name)
-		}
-	}
-	slices.Sort(remaining)
-	return append(deployOrder, remaining...)
 }
