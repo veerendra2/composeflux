@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/docker/compose/v5/pkg/api"
+
 	"github.com/veerendra2/composeflux/internal/metrics"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
@@ -16,7 +17,7 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ManagedValue
 }
 
-// Prune deletes the running stacks which are not in source repo
+// Prune deletes the running stacks which are not in the source repository
 func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
 	runningStack, err := r.dClient.List(ctx)
 	if err != nil {

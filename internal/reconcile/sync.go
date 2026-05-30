@@ -70,7 +70,7 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 	return nil
 }
 
-// Sync pulls changes from Git repo and deploys stacks which are changed and new
+// Sync pulls changes from the Git repository and deploys stacks which are changed or new
 func (r *Reconciler) Sync(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
@@ -161,7 +161,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		slog.Info("Successfully deployed the stack", "stack_name", name)
 	}
 
-	// Prune stacks which are not in Git repo
+	// Prune stacks which are not in the Git repository
 	if err := r.Prune(ctx, composeCfgs); err != nil {
 		slog.Error("Failed to prune stacks", "error", err)
 	}
@@ -175,7 +175,7 @@ func orderStacks(toDeploy map[string]*types.Project, startupOrder []string) []st
 	seen := make(map[string]bool)
 
 	for _, name := range startupOrder {
-		if _, exists := toDeploy[name]; exists {
+		if _, exists := toDeploy[name]; exists && !seen[name] {
 			deployOrder = append(deployOrder, name)
 			seen[name] = true
 		}

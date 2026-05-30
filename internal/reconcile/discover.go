@@ -44,7 +44,7 @@ func (r *Reconciler) buildComposeConfig(dirPath string, envs []string) (dockerco
 	}, nil
 }
 
-// discoverComposeStack find the directory contains docker compose files
+// discoverComposeStack finds the directories containing docker compose files
 func (r *Reconciler) discoverComposeStack(envs []string) ([]dockercompose.ComposeConfig, error) {
 	// Read all entries in the stacks directory
 	stackFullPath := filepath.Join(r.gClient.Path(), r.stackPath)
