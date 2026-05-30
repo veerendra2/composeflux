@@ -84,10 +84,6 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 		return err
 	}
 
-	if cfg == nil {
-		slog.Warn("Stack config not found, continuing without it")
-	}
-
 	// Discover compose stacks
 	composeCfgs, err := r.discoverComposeStack(envs)
 	if err != nil {
