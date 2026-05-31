@@ -27,7 +27,7 @@ func findExistingFiles(dirPath string, fileNames []string) []string {
 }
 
 // buildComposeConfig builds `dockercompose.ComposeConfig` for given directory if compose files exists
-func (r *Reconciler) buildComposeConfig(dirPath string) (dockercompose.ComposeConfig, error) {
+func (r *Reconciler) buildComposeConfig(dirPath string, envs []string) (dockercompose.ComposeConfig, error) {
 	// Find compose files
 	composeFilePaths := findExistingFiles(dirPath, defaultFileNames)
 	if len(composeFilePaths) == 0 {
@@ -40,12 +40,12 @@ func (r *Reconciler) buildComposeConfig(dirPath string) (dockercompose.ComposeCo
 	return dockercompose.ComposeConfig{
 		ComposeFiles: composeFilePaths,
 		WorkingDir:   dirPath,
-		Env:          r.cacheGet(),
+		Env:          envs,
 	}, nil
 }
 
-// discoverComposeStack find the directory contains docker compose files
-func (r *Reconciler) discoverComposeStack() ([]dockercompose.ComposeConfig, error) {
+// discoverComposeStack finds the directories containing docker compose files
+func (r *Reconciler) discoverComposeStack(envs []string) ([]dockercompose.ComposeConfig, error) {
 	// Read all entries in the stacks directory
 	stackFullPath := filepath.Join(r.gClient.Path(), r.stackPath)
 	entries, err := os.ReadDir(stackFullPath)
@@ -64,7 +64,7 @@ func (r *Reconciler) discoverComposeStack() ([]dockercompose.ComposeConfig, erro
 		dirPath := filepath.Join(stackFullPath, entry.Name())
 
 		// Build compose configuration from the directory
-		composeCfg, err := r.buildComposeConfig(dirPath)
+		composeCfg, err := r.buildComposeConfig(dirPath, envs)
 		if err != nil {
 			slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", entry.Name(), "error", err)
 			continue

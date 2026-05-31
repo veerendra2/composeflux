@@ -17,13 +17,13 @@ import (
 func (r *Reconciler) SyncImages(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
-	defer r.cacheClear()
 
-	if _, err := r.loadCache(); err != nil {
+	envs, _, err := r.loadEnvAndConfig()
+	if err != nil {
 		return err
 	}
 
-	composeCfgs, err := r.discoverComposeStack()
+	composeCfgs, err := r.discoverComposeStack(envs)
 	if err != nil {
 		slog.Error("Failed to discover compose stacks for image update check", "error", err)
 		return err
@@ -48,18 +48,19 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 		}
 
 		metrics.ImageUpdatesTotal.WithLabelValues(project.Name).Inc()
+
 		if err := r.dClient.Pull(ctx, project); err != nil {
 			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
-		metrics.DeploymentsTotal.WithLabelValues(project.Name).Inc()
+
 		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
 			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
-			metrics.DeploymentFailuresTotal.WithLabelValues(project.Name).Inc()
 			continue
 		}
+
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
 	}
 
@@ -71,41 +72,34 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 	return nil
 }
 
-// Sync pulls changes from Git repo and deploys stacks which are changed and new
+// Sync pulls changes from the Git repository and deploys stacks which are changed or new
 func (r *Reconciler) Sync(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
-	defer r.cacheClear()
 
 	if err := r.gClient.Pull(ctx); err != nil {
 		return err
 	}
 
-	cfg, err := r.loadCache()
+	envs, startupOrder, err := r.loadEnvAndConfig()
 	if err != nil {
 		return err
-	}
-
-	if cfg == nil {
-		slog.Warn("Stack config not found, continuing without it")
-	}
-
-	// Validate StartupOrder directories exist
-	if cfg != nil && len(cfg.StartupOrder) > 0 {
-		for _, stackName := range cfg.StartupOrder {
-			startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
-			if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
-				slog.Warn("Stack directory in startup_order not found",
-					"startup_order_item", stackName,
-					"expected_path", startupItemDir)
-			}
-		}
 	}
 
 	// Discover compose stacks
-	composeCfgs, err := r.discoverComposeStack()
+	composeCfgs, err := r.discoverComposeStack(envs)
 	if err != nil {
 		return err
+	}
+
+	// Validate StartupOrder directories and log warning if not exists
+	for _, stackName := range startupOrder {
+		startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+		if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
+			slog.Warn("Stack directory in startup_order not found",
+				"startup_order_item", stackName,
+				"expected_path", startupItemDir)
+		}
 	}
 
 	// Get current running stacks info
@@ -128,7 +122,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 
 		sourceHash, err := projectChecksum(project)
 		if err != nil {
-			slog.Warn("Failed to get hash from the running stack, picking for deployment anyways",
+			slog.Warn("Failed to calculate project checksum, deploying stack anyway",
 				"stack_name", project.Name, "error", err)
 			// Deploy anyway if hash calculation fails
 			toDeploy[project.Name] = project
@@ -149,12 +143,11 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	// Create slice to arrange stack array according to StartupOrder
 	// defined in the stack config
 	deployOrder := []string{}
-	if cfg != nil && len(cfg.StartupOrder) > 0 {
-		for _, stackName := range cfg.StartupOrder {
-			// Add StartupOrder first, if the stack in StartupOrder is also in toDeploy
-			if _, exists := toDeploy[stackName]; exists {
-				deployOrder = append(deployOrder, stackName)
-			}
+
+	for _, stackName := range startupOrder {
+		// Add StartupOrder first, if the stack in StartupOrder is also in toDeploy
+		if _, exists := toDeploy[stackName]; exists {
+			deployOrder = append(deployOrder, stackName)
 		}
 	}
 
@@ -167,23 +160,20 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	if len(deployOrder) > 0 {
-		slog.Info("Deploying stacks", "count", len(deployOrder),
-			"order", strings.Join(deployOrder, ","))
+		slog.Info("Deploying stacks", "count", len(deployOrder), "order", strings.Join(deployOrder, ","))
 	}
 
-	for _, stackName := range deployOrder {
-		if project, exists := toDeploy[stackName]; exists {
-			metrics.DeploymentsTotal.WithLabelValues(stackName).Inc()
-			if err := r.Deploy(ctx, project); err != nil {
-				slog.Warn("Failed to deploy the stack", "stack_name", stackName, "error", err)
-				metrics.DeploymentFailuresTotal.WithLabelValues(stackName).Inc()
-				continue
-			}
-			slog.Info("Successfully deployed the stack", "stack_name", stackName)
+	for _, name := range deployOrder {
+		metrics.DeploymentsTotal.WithLabelValues(name).Inc()
+		if err := r.Deploy(ctx, toDeploy[name]); err != nil {
+			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
+			metrics.DeploymentFailuresTotal.WithLabelValues(name).Inc()
+			continue
 		}
+		slog.Info("Successfully deployed the stack", "stack_name", name)
 	}
 
-	// Prune stacks which are not in Git repo
+	// Prune stacks which are not in the Git repository
 	if err := r.Prune(ctx, composeCfgs); err != nil {
 		slog.Error("Failed to prune stacks", "error", err)
 	}

@@ -7,16 +7,17 @@ import (
 	"strings"
 
 	"github.com/docker/compose/v5/pkg/api"
+
 	"github.com/veerendra2/composeflux/internal/metrics"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
 // isManagedStack checks if the stack is managed by composeflux via container labels.
 func isManagedStack(containers []api.ContainerSummary) bool {
-	return len(containers) > 0 && containers[0].Labels[LabelManaged] == ManagedValue
+	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ManagedValue
 }
 
-// Prune deletes the running stacks which are not in source repo
+// Prune deletes the running stacks which are not in the source repository
 func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
 	runningStack, err := r.dClient.List(ctx)
 	if err != nil {
@@ -35,7 +36,7 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to get stack", "error", err)
+			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			continue
 		}
 
@@ -84,7 +85,7 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 	for _, stack := range stacks {
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to get stack", "error", err)
+			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			continue
 		}
 
