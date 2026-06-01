@@ -36,6 +36,11 @@ func (r *Reconciler) SyncImages(ctx context.Context) error {
 			continue
 		}
 
+		if hasImageUpdateExcludeLabel(project) {
+			slog.Info("Stack has image update excluded, skipping", "stack_name", project.Name)
+			continue
+		}
+
 		hasUpdate, err := r.dClient.HasImageUpdates(ctx, project)
 		if err != nil {
 			slog.Warn("Failed to check image updates", "stack_name", project.Name, "error", err)

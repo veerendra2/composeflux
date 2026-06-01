@@ -12,6 +12,7 @@ _A GitOps continuous deployment tool for Docker Compose_
 <a href="https://github.com/veerendra2/composeflux/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/veerendra2/composeflux/ci.yml?style=flat&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
 <a href="https://github.com/veerendra2/composeflux/releases/latest"><img src="https://img.shields.io/github/v/release/veerendra2/composeflux?style=flat&logo=github" alt="Release"></a>
 <a href="https://ghcr.io/veerendra2/composeflux"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64-blue?style=flat&logo=docker&logoColor=white" alt="Docker"></a>
+<a href="https://github.com/veerendra2/composeflux"><img src="https://img.shields.io/badge/GitHub-Repository-blue?style=flat&logo=github" alt="GitHub"></a>
 </p>
 
 ComposeFlux automates Docker Compose deployments using GitOps principles. Monitor your Git repository, detect changes,
