@@ -43,7 +43,8 @@ ComposeFlux uses a hash-based approach to decide whether a stack needs redeployi
 
 ## Image Update Exclusion
 
-Exclude stacks from automatic image updates by adding the `composeflux.image-update.exclude: "true"` label to any service. **If any service has this label, the entire stack is skipped.**
+Exclude stacks from automatic image updates by adding the `composeflux.image-update.exclude: "true"` label to any
+service. **If any service has this label, the entire stack is skipped.**
 
 **Example:**
 
@@ -55,10 +56,7 @@ services:
       composeflux.image-update.exclude: "true"
 ```
 
-**Notes:**
-- Only compose file labels are supported
-- If ANY service has the label, the entire stack is excluded
-- Label value must be exactly `"true"` (case-sensitive)
+**Notes: If ANY service has the label, the entire stack is excluded**
 
 ## Stack Configuration
 
