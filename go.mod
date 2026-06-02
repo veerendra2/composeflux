@@ -3,7 +3,7 @@ module github.com/veerendra2/composeflux
 go 1.26
 
 require (
-	github.com/docker/cli v29.5.1+incompatible
+	github.com/docker/cli v29.5.2+incompatible
 	github.com/docker/compose/v5 v5.1.4
 )
 
