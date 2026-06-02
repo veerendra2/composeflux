@@ -17,9 +17,6 @@ automatically deploys stacks when changes are detected.
 ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an initial sync at startup, then checks the
 remote Git repository for changes and syncs again when updates are detected.
 
-Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks
-when a new image digest is detected.
-
 1. Pulls latest commits
 2. Fetches secrets from secrets manager
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
@@ -27,6 +24,9 @@ when a new image digest is detected.
 5. Calculates SHA256 hash for each stack
 6. Deploys stacks with changed hashes (respects [`startup_order`](#stack-configuration))
 7. Prunes stacks deleted from Git
+
+Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks
+when a new image digest is detected.
 
 ## Hash-Based Change Detection
 
@@ -40,6 +40,23 @@ ComposeFlux uses a hash-based approach to decide whether a stack needs redeployi
   app config files directly into containers.
 - Stack is redeployed only when the hash changes; otherwise it is skipped (no unnecessary redeployment)
 - Hash is stored in the `composeflux.stack-hash` label on deployed containers
+
+## Image Update Exclusion
+
+Exclude stacks from automatic image updates by adding the `composeflux.image-update.exclude: "true"` label to any
+service. **If any service has this label, the entire stack is skipped.**
+
+**Example:**
+
+```yaml
+services:
+  db:
+    image: postgres:15
+    labels:
+      composeflux.image-update.exclude: "true"
+```
+
+**Notes: If ANY service has the label, the entire stack is excluded**
 
 ## Stack Configuration
 
