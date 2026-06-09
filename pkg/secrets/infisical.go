@@ -80,9 +80,10 @@ func (c *infisicalClient) Close() {
 }
 
 func NewInfisicalClient(ctx context.Context, cfg InfisicalConfig) (Client, error) {
+	autoTokenRefresh := true
 	client := infisical.NewInfisicalClient(ctx, infisical.Config{
 		SiteUrl:          cfg.SiteUrl,
-		AutoTokenRefresh: true,
+		AutoTokenRefresh: &autoTokenRefresh,
 	})
 	_, err := client.Auth().UniversalAuthLogin(cfg.ClientID, cfg.ClientSecret)
 	if err != nil {
