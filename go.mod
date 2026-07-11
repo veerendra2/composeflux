@@ -4,13 +4,13 @@ go 1.26
 
 require (
 	github.com/docker/cli v29.6.1+incompatible
-	github.com/docker/compose/v5 v5.2.0
+	github.com/docker/compose/v5 v5.3.0
 )
 
 require (
 	github.com/alecthomas/kong v1.15.0
 	github.com/bitwarden/sdk-go/v2 v2.1.0
-	github.com/compose-spec/compose-go/v2 v2.12.1
+	github.com/compose-spec/compose-go/v2 v2.13.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-git/go-git/v5 v5.19.1
