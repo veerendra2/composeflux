@@ -186,8 +186,8 @@ docker update --label-rm composeflux.suspend <container-name>
 
 ## Periodic Docker Resource Pruning
 
-When `PRUNE_RESOURCES=true`, ComposeFlux runs a periodic prune cycle (default: every `24h`, configurable via
-`PRUNE_INTERVAL`) to reclaim disk space from unused Docker resources.
+When `PRUNE_INTERVAL` is set, ComposeFlux runs a periodic prune cycle (default: every `24h`, configurable via
+`PRUNE_INTERVAL`) to reclaim disk space from unused Docker resources. Unset `PRUNE_INTERVAL` to disable pruning entirely.
 
 **What is pruned:** images (including non-dangling), volumes, build cache. Containers and networks are not pruned.
 

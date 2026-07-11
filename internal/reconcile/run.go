@@ -22,9 +22,9 @@ func (r *Reconciler) Run(ctx context.Context) {
 	healthTicker := time.NewTicker(r.healthInterval)
 	defer healthTicker.Stop()
 
-	// nil channel blocks forever — safe to use in select when pruneResources=false
+	// nil channel blocks forever — safe to use in select when PRUNE_INTERVAL is unset
 	var pruneTickerC <-chan time.Time
-	if r.pruneResources {
+	if r.pruneInterval != 0 {
 		pruneTicker := time.NewTicker(r.pruneInterval)
 		defer pruneTicker.Stop()
 		pruneTickerC = pruneTicker.C

@@ -61,13 +61,12 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `LOG_FORMAT`                | Log format (`console`/`json`)                                                                                                 | `console`                  |
 | `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
 | `REMOVE_ORPHANS`            | Remove orphan containers during deploy                                                                                        | `true`                     |
-| `PRUNE_RESOURCES`           | Enable periodic Docker resource pruning. Unused images, volumes, and build cache are pruned on `PRUNE_INTERVAL`, but only when all managed stacks are healthy. | `true`      |
-| `PRUNE_INTERVAL`            | Interval for the Docker resource prune cycle. Only active when `PRUNE_RESOURCES=true`.                                        | `24h`                      |
+| `PRUNE_INTERVAL`            | Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all managed stacks are healthy. Unset to disable. | `24h`       |
 | `METRICS_ADDR`              | Prometheus metrics listen address. Empty to disable.                                                                          | `:9090`                    |
 
 !!! warning
 
-    When `PRUNE_RESOURCES=true`, pruning removes **all unused Docker resources** including images, volumes, and build cache. Any image not used by a running container will be deleted. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.suspend=true` label set.
+    When `PRUNE_INTERVAL` is set, pruning removes **all unused Docker resources** including images, volumes, and build cache. Any image not used by a running container will be deleted. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.suspend=true` label set.
 
 ## Commands
 
