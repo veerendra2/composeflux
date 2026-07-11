@@ -39,6 +39,12 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	for _, src := range srcStacks {
 		stackName := filepath.Base(src.WorkingDir)
 
+		status, exists := statusMap[stackName]
+		if !exists {
+			// Stack not deployed yet, git sync will handle it
+			continue
+		}
+
 		containers, err := r.dClient.Ps(ctx, stackName)
 		if err != nil {
 			slog.Warn("Failed to list containers for stack during health reconcile", "stack_name", stackName, "error", err)
@@ -50,7 +56,6 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 			continue
 		}
 
-		status := statusMap[stackName]
 		if isStackHealthy(status, containers) {
 			continue
 		}

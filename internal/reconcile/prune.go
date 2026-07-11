@@ -35,6 +35,9 @@ func isStackHealthy(stackStatus string, containers []api.ContainerSummary) bool 
 	if stackStatus != "Running" {
 		return false
 	}
+	if len(containers) == 0 {
+		return false // No containers = unhealthy
+	}
 	for _, c := range containers {
 		if c.State == "exited" || c.State == "dead" {
 			return false
@@ -60,6 +63,12 @@ func (r *Reconciler) allManagedStacksHealthy(ctx context.Context, srcStacks []do
 	for _, src := range srcStacks {
 		stackName := filepath.Base(src.WorkingDir)
 
+		status, exists := statusMap[stackName]
+		if !exists {
+			// Stack not deployed yet, skip health check
+			continue
+		}
+
 		containers, err := r.dClient.Ps(ctx, stackName)
 		if err != nil {
 			slog.Warn("Failed to list containers for stack during health check", "stack_name", stackName, "error", err)
@@ -71,7 +80,6 @@ func (r *Reconciler) allManagedStacksHealthy(ctx context.Context, srcStacks []do
 			return false, nil
 		}
 
-		status := statusMap[stackName]
 		if !isStackHealthy(status, containers) {
 			slog.Info("Stack is not healthy, skipping prune", "stack_name", stackName, "status", status)
 			return false, nil
