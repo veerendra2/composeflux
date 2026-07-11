@@ -28,6 +28,13 @@ remote Git repository for changes and syncs again when updates are detected.
 Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks
 when a new image digest is detected.
 
+Two additional background loops run independently:
+
+- **Health reconciliation** — checks all managed stacks on `HEALTH_RECONCILE_INTERVAL` (default: 5m) and redeploys any
+  that are stopped or have exited/dead containers
+- **Docker resource prune** — prunes unused images, volumes, and build cache on `PRUNE_INTERVAL` (default: 24h), but
+  only when all managed stacks are healthy (see [Periodic Docker Resource Pruning](#periodic-docker-resource-pruning))
+
 ## Hash-Based Change Detection
 
 ComposeFlux uses a hash-based approach to decide whether a stack needs redeploying:
@@ -135,6 +142,59 @@ Server 1 (homeserver-1)          Server 2 (homeserver-2)
 
 Each ComposeFlux instance only manages stacks in its configured directory.
 
+## Proactive Stack Health Reconciliation
+
+In addition to Git-triggered syncs, ComposeFlux periodically checks all managed stacks and redeploys any that are
+unhealthy. This catches stacks that stopped, crashed, or were manually shut down between git ticks — without relying
+solely on Docker restart policies.
+
+**A stack is considered unhealthy if:**
+
+- Its compose status is not `Running`, OR
+- Any container in the stack is in `exited` or `dead` state
+
+`restarting` is intentionally not treated as unhealthy — if Docker's restart policy is actively recovering a container,
+ComposeFlux steps aside.
+
+**Recovery action:** ComposeFlux calls `docker compose up` using the existing project config (no git pull). The git
+ticker continues to handle source drift independently.
+
+Configure the check interval with `HEALTH_RECONCILE_INTERVAL` (default: `5m`).
+
+## Suspend Label
+
+You can pause reconciliation for a specific stack by setting the `composeflux.suspend=true` label on any container in
+that stack via the Docker CLI:
+
+```bash
+docker update --label-add composeflux.suspend=true <container-name>
+```
+
+**When any container in a stack has this label:**
+
+- The health reconciliation loop skips that stack entirely
+- The Docker resource prune loop aborts and skips pruning for the entire run
+
+This is useful during maintenance operations — for example, stopping a database container for a backup (`docker stop
+postgres`) without triggering an immediate reconcile that would restart it.
+
+To resume reconciliation, remove the label:
+
+```bash
+docker update --label-rm composeflux.suspend <container-name>
+```
+
+## Periodic Docker Resource Pruning
+
+When `PRUNE_RESOURCES=true`, ComposeFlux runs a periodic prune cycle (default: every `24h`, configurable via
+`PRUNE_INTERVAL`) to reclaim disk space from unused Docker resources.
+
+**What is pruned:** images (including non-dangling), volumes, build cache. Containers and networks are not pruned.
+
+**Safety guard:** The prune cycle only runs when **all** composeflux-managed stacks are healthy. If any stack is
+stopped, degraded, or has the `composeflux.suspend=true` label set, the prune cycle is skipped for that interval and
+a warning is logged.
+
 ## Blog Posts
 
 To learn more about the motivation behind ComposeFlux and see it in action:
@@ -149,9 +209,6 @@ To learn more about the motivation behind ComposeFlux and see it in action:
 - Nested stack discovery (only scans one level deep)
 - Multi-server orchestration (no central controller)
 - Rolling updates or zero-downtime deployments
-- No active reconciliation of stack/container status (e.g., stopped/exited containers are not auto-redeployed). This
-  used to be part of the implementation but was removed for simplicity. (💡 _Use Docker
-  [restart policies](https://docs.docker.com/engine/containers/start-containers-automatically/) instead_)
 - Built-in monitoring or alerting
 
 **Stack Discovery is One Level Deep:**
