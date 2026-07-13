@@ -29,14 +29,22 @@ func isStackSuspended(containers []api.ContainerSummary) bool {
 	return false
 }
 
-// isStackHealthy returns true if no container is exited or dead.
+// isStackHealthy returns true if no container is crashed or dead.
+// Exited containers with exit code 0 are healthy (completed successfully, like init containers).
+// Exited containers with non-zero exit code are unhealthy (crashed).
 // restarting is intentionally not treated as unhealthy — Docker restart policy is working.
 func isStackHealthy(containers []api.ContainerSummary) bool {
 	if len(containers) == 0 {
 		return false // No containers = unhealthy
 	}
 	for _, c := range containers {
-		if c.State == "exited" || c.State == "dead" {
+		// Dead containers are always unhealthy
+		if c.State == "dead" {
+			return false
+		}
+		// Exited with non-zero exit code = crashed (unhealthy)
+		// Exited with exit code 0 = completed successfully (healthy, like init containers)
+		if c.State == "exited" && c.ExitCode != 0 {
 			return false
 		}
 	}
