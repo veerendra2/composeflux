@@ -39,7 +39,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	for _, src := range srcStacks {
 		stackName := filepath.Base(src.WorkingDir)
 
-		status, exists := statusMap[stackName]
+		_, exists := statusMap[stackName]
 		if !exists {
 			// Stack not deployed yet, git sync will handle it
 			continue
@@ -56,11 +56,11 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 			continue
 		}
 
-		if isStackHealthy(status, containers) {
+		if isStackHealthy(containers) {
 			continue
 		}
 
-		slog.Info("Stack is unhealthy, redeploying", "stack_name", stackName, "status", status)
+		slog.Info("Stack is unhealthy, redeploying", "stack_name", stackName)
 
 		project, err := r.dClient.LoadProject(ctx, src)
 		if err != nil {

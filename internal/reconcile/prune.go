@@ -29,12 +29,9 @@ func isStackSuspended(containers []api.ContainerSummary) bool {
 	return false
 }
 
-// isStackHealthy returns true if the stack status is Running and no container is exited or dead.
+// isStackHealthy returns true if no container is exited or dead.
 // restarting is intentionally not treated as unhealthy — Docker restart policy is working.
-func isStackHealthy(stackStatus string, containers []api.ContainerSummary) bool {
-	if stackStatus != "Running" {
-		return false
-	}
+func isStackHealthy(containers []api.ContainerSummary) bool {
 	if len(containers) == 0 {
 		return false // No containers = unhealthy
 	}
@@ -63,7 +60,7 @@ func (r *Reconciler) allManagedStacksHealthy(ctx context.Context, srcStacks []do
 	for _, src := range srcStacks {
 		stackName := filepath.Base(src.WorkingDir)
 
-		status, exists := statusMap[stackName]
+		_, exists := statusMap[stackName]
 		if !exists {
 			// Stack not deployed yet, skip health check
 			continue
@@ -80,8 +77,8 @@ func (r *Reconciler) allManagedStacksHealthy(ctx context.Context, srcStacks []do
 			return false, nil
 		}
 
-		if !isStackHealthy(status, containers) {
-			slog.Info("Stack is not healthy, skipping prune", "stack_name", stackName, "status", status)
+		if !isStackHealthy(containers) {
+			slog.Info("Stack is not healthy, skipping prune", "stack_name", stackName)
 			return false, nil
 		}
 	}
