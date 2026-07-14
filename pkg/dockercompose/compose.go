@@ -31,6 +31,7 @@ type Client interface {
 	Down(ctx context.Context, projectName string) error
 	HasImageUpdates(ctx context.Context, project *types.Project) (bool, error)
 	List(ctx context.Context) ([]api.Stack, error)
+	ListAllContainers(ctx context.Context) ([]api.ContainerSummary, error)
 	Prune(ctx context.Context)
 	Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error)
 	Pull(ctx context.Context, project *types.Project) error
@@ -76,6 +77,12 @@ func (c *client) Down(ctx context.Context, projectName string) error {
 
 func (c *client) List(ctx context.Context) ([]api.Stack, error) {
 	return c.compose.List(ctx, api.ListOptions{
+		All: true,
+	})
+}
+
+func (c *client) ListAllContainers(ctx context.Context) ([]api.ContainerSummary, error) {
+	return c.compose.Ps(ctx, "", api.PsOptions{
 		All: true,
 	})
 }

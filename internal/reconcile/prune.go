@@ -37,49 +37,57 @@ func isStackHealthy(containers []api.ContainerSummary) bool {
 	if len(containers) == 0 {
 		return false // No containers = unhealthy
 	}
+
+	hasRunningContainer := false
+
 	for _, c := range containers {
 		// Dead containers are always unhealthy
 		if c.State == "dead" {
 			return false
 		}
 		// Exited with non-zero exit code = crashed (unhealthy)
-		// Exited with exit code 0 = completed successfully (healthy, like init containers)
 		if c.State == "exited" && c.ExitCode != 0 {
 			return false
 		}
+
+		// Track if at least one container is NOT exited
+		if c.State != "exited" {
+			hasRunningContainer = true
+		}
 	}
+
+	// If ALL containers are exited (even with code 0) → unhealthy (stack is down)
+	if !hasRunningContainer {
+		return false
+	}
+
 	return true
 }
 
-// allManagedStacksHealthy returns true only if every stack discovered from Git is healthy
+// allManagedStacksHealthy returns true only if every deployed managed stack is healthy
 // and none has the suspend label set. Any suspended stack causes an immediate false return.
-func (r *Reconciler) allManagedStacksHealthy(ctx context.Context, srcStacks []dockercompose.ComposeConfig) (bool, error) {
-	runningStacks, err := r.dClient.List(ctx)
+func (r *Reconciler) allManagedStacksHealthy(ctx context.Context) (bool, error) {
+	allContainers, err := r.dClient.ListAllContainers(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	// Build a map from stack name to status for O(1) lookup
-	statusMap := make(map[string]string, len(runningStacks))
-	for _, s := range runningStacks {
-		statusMap[s.Name] = s.Status
+	// Filter for managed containers
+	var managedContainers []api.ContainerSummary
+	for _, c := range allContainers {
+		if c.Labels != nil && c.Labels[LabelManaged] == ManagedValue {
+			managedContainers = append(managedContainers, c)
+		}
 	}
 
-	for _, src := range srcStacks {
-		stackName := filepath.Base(src.WorkingDir)
+	if len(managedContainers) == 0 {
+		return true, nil // No managed containers, considered healthy
+	}
 
-		_, exists := statusMap[stackName]
-		if !exists {
-			// Stack not deployed yet, skip health check
-			continue
-		}
+	// Group containers by project name
+	projectGroups := r.groupContainersByProject(managedContainers)
 
-		containers, err := r.dClient.Ps(ctx, stackName)
-		if err != nil {
-			slog.Warn("Failed to list containers for stack during health check", "stack_name", stackName, "error", err)
-			return false, nil
-		}
-
+	for stackName, containers := range projectGroups {
 		if isStackSuspended(containers) {
 			slog.Info("Stack is suspended, skipping prune", "stack_name", stackName)
 			return false, nil
@@ -100,17 +108,7 @@ func (r *Reconciler) PruneDockerResources(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	envs, _, err := r.loadEnvAndConfig()
-	if err != nil {
-		return err
-	}
-
-	srcStacks, err := r.discoverComposeStack(envs)
-	if err != nil {
-		return err
-	}
-
-	healthy, err := r.allManagedStacksHealthy(ctx, srcStacks)
+	healthy, err := r.allManagedStacksHealthy(ctx)
 	if err != nil {
 		return err
 	}
