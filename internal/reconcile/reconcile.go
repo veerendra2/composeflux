@@ -1,8 +1,6 @@
 package reconcile
 
 import (
-	"log/slog"
-	"os"
 	"sync"
 	"time"
 
@@ -37,11 +35,6 @@ type Reconciler struct {
 }
 
 func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dockercompose.Client) (*Reconciler, error) {
-	// Deprecation warning for removed PRUNE_RESOURCES env var
-	if os.Getenv("PRUNE_RESOURCES") != "" {
-		slog.Warn("PRUNE_RESOURCES is deprecated and no longer has any effect. Use PRUNE_INTERVAL instead (e.g., PRUNE_INTERVAL=24h). Set PRUNE_INTERVAL=0 to disable pruning.")
-	}
-
 	return &Reconciler{
 		configFile: cfg.ConfigFile,
 		stackPath:  cfg.StackPath,

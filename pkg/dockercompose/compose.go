@@ -18,6 +18,7 @@ import (
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
 	dockerregistry "github.com/docker/docker/registry"
+	"github.com/moby/moby/api/types/container"
 	mobyClient "github.com/moby/moby/client"
 	"github.com/sirupsen/logrus"
 )
@@ -31,12 +32,13 @@ type Client interface {
 	Down(ctx context.Context, projectName string) error
 	HasImageUpdates(ctx context.Context, project *types.Project) (bool, error)
 	List(ctx context.Context) ([]api.Stack, error)
-	ListAllContainers(ctx context.Context) ([]api.ContainerSummary, error)
-	Prune(ctx context.Context)
 	Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error)
 	Pull(ctx context.Context, project *types.Project) error
 	Restart(ctx context.Context, projectName string) error
 	Up(ctx context.Context, project *types.Project) error
+
+	ListContainers(ctx context.Context, labels []string) ([]container.Summary, error)
+	Prune(ctx context.Context)
 	Version(ctx context.Context) ([]any, error)
 }
 
@@ -81,42 +83,7 @@ func (c *client) List(ctx context.Context) ([]api.Stack, error) {
 	})
 }
 
-func (c *client) ListAllContainers(ctx context.Context) ([]api.ContainerSummary, error) {
-	return c.compose.Ps(ctx, "", api.PsOptions{
-		All: true,
-	})
-}
-
-func (c *client) Prune(ctx context.Context) {
-	// ContainerPrune and NetworkPrune are disabled to preserve stopped containers
-	// and their networks during maintenance.
-	// See: https://github.com/veerendra2/composeflux/issues/22
-	//
-	// f := mobyClient.Filters{}
-	// if _, err := c.docker.ContainerPrune(ctx, mobyClient.ContainerPruneOptions{Filters: f}); err != nil {
-	// 	slog.Warn("Failed to prune containers", "error", err)
-	// }
-	//
-	// networkFilter := mobyClient.Filters{}
-	// if _, err := c.docker.NetworkPrune(ctx, mobyClient.NetworkPruneOptions{Filters: networkFilter}); err != nil {
-	// 	slog.Warn("Failed to prune networks", "error", err)
-	// }
-
-	pruneAllFilter := mobyClient.Filters{}
-	pruneAllFilter.Add("dangling", "false")
-	if _, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{Filters: pruneAllFilter}); err != nil {
-		slog.Warn("Failed to prune images", "error", err)
-	}
-
-	if _, err := c.docker.VolumePrune(ctx, mobyClient.VolumePruneOptions{All: true}); err != nil {
-		slog.Warn("Failed to prune volumes", "error", err)
-	}
-
-	if _, err := c.docker.BuildCachePrune(ctx, mobyClient.BuildCachePruneOptions{All: true}); err != nil {
-		slog.Warn("Failed to prune build cache", "error", err)
-	}
-}
-
+// https://pkg.go.dev/github.com/docker/compose/v5/pkg/api#ContainerSummary
 func (c *client) Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error) {
 	return c.compose.Ps(ctx, projectName, api.PsOptions{
 		All: true,
@@ -219,20 +186,6 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		}
 	}
 	return false, nil
-}
-
-func (c *client) Version(ctx context.Context) ([]any, error) {
-	serverVersion, err := c.docker.ServerVersion(ctx, mobyClient.ServerVersionOptions{})
-	if err != nil {
-		return []any{}, err
-	}
-	clientVersion := c.docker.ClientVersion()
-
-	return []any{
-		"server_engine", serverVersion.Version,
-		"server_api", serverVersion.APIVersion,
-		"client_api", clientVersion,
-	}, nil
 }
 
 func New(cfg Config) (Client, error) {

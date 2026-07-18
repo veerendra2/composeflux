@@ -13,72 +13,8 @@ import (
 	"github.com/veerendra2/composeflux/internal/metrics"
 )
 
-// SyncImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
-func (r *Reconciler) SyncImages(ctx context.Context) error {
-	r.reconcileMu.Lock()
-	defer r.reconcileMu.Unlock()
-
-	envs, _, err := r.loadEnvAndConfig()
-	if err != nil {
-		return err
-	}
-
-	composeCfgs, err := r.discoverComposeStack(envs)
-	if err != nil {
-		slog.Error("Failed to discover compose stacks for image update check", "error", err)
-		return err
-	}
-
-	for _, composeCfg := range composeCfgs {
-		project, err := r.dClient.LoadProject(ctx, composeCfg)
-		if err != nil {
-			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
-			continue
-		}
-
-		if hasImageUpdateExcludeLabel(project) {
-			slog.Info("Stack has image update excluded, skipping", "stack_name", project.Name)
-			continue
-		}
-
-		hasUpdate, err := r.dClient.HasImageUpdates(ctx, project)
-		if err != nil {
-			slog.Warn("Failed to check image updates", "stack_name", project.Name, "error", err)
-			continue
-		}
-
-		if !hasUpdate {
-			slog.Debug("All images up to date", "stack_name", project.Name)
-			continue
-		}
-
-		metrics.ImageUpdatesTotal.WithLabelValues(project.Name).Inc()
-
-		if err := r.dClient.Pull(ctx, project); err != nil {
-			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
-			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
-			continue
-		}
-
-		if err := r.Deploy(ctx, project); err != nil {
-			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
-			metrics.ImageUpdateFailuresTotal.WithLabelValues(project.Name).Inc()
-			continue
-		}
-
-		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
-	}
-
-	// Prune stacks which are not in Git repo
-	if err := r.Prune(ctx, composeCfgs); err != nil {
-		slog.Error("Failed to prune stacks", "error", err)
-	}
-
-	return nil
-}
-
-// Sync pulls changes from the Git repository and deploys stacks which are changed or new
-func (r *Reconciler) Sync(ctx context.Context) error {
+// GitSync pulls changes from the Git repository and deploys stacks which are changed or new
+func (r *Reconciler) GitSync(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
@@ -179,7 +115,7 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 	}
 
 	// Prune stacks which are not in the Git repository
-	if err := r.Prune(ctx, composeCfgs); err != nil {
+	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
 		slog.Error("Failed to prune stacks", "error", err)
 	}
 

@@ -25,7 +25,7 @@ func (s *SyncCmd) Run() error {
 	defer cancel()
 
 	slog.Info("Starting one-shot sync")
-	if err := rClient.Sync(syncCtx); err != nil {
+	if err := rClient.GitSync(syncCtx); err != nil {
 		slog.Error("Sync failed", "error", err)
 		return err
 	}

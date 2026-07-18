@@ -11,13 +11,16 @@ import (
 )
 
 const (
-	LabelAppVersion           = "composeflux.version"
-	LabelDeployedAt           = "composeflux.deployed-at"
-	LabelManaged              = "composeflux.managed"
-	LabelStackHash            = "composeflux.stack-hash"
-	LabelImageUpdateExclude   = "composeflux.image-update.exclude"
-	LabelSuspend              = "composeflux.suspend"
-	ManagedValue              = "true"
+	LabelAppVersion         = "composeflux.version"
+	LabelDeployedAt         = "composeflux.deployed-at"
+	LabelManaged            = "composeflux.managed"
+	LabelStackHash          = "composeflux.stack-hash"
+	LabelImageUpdateExclude = "composeflux.image-update.exclude"
+	LabelSuspend            = "composeflux.suspend"
+	LabelInit               = "composeflux.init"
+	ValueTrue               = "true"
+
+	LabelDockerComposeWorkingDir = "com.docker.compose.project.working_dir"
 )
 
 // projectChecksum computes sha256 of docker compose yaml content
@@ -29,16 +32,6 @@ func projectChecksum(project *types.Project) (string, error) {
 
 	hash := sha256.Sum256(content)
 	return fmt.Sprintf("sha256:%x", hash), nil
-}
-
-// hasImageUpdateExcludeLabel checks if any service in the project has the image update exclude label.
-func hasImageUpdateExcludeLabel(project *types.Project) bool {
-	for _, svc := range project.Services {
-		if excludeValue, ok := svc.Labels[LabelImageUpdateExclude]; ok && excludeValue == "true" {
-			return true
-		}
-	}
-	return false
 }
 
 // Deploy deploys the docker compose project with custom labels and environmental variables.
@@ -58,7 +51,7 @@ func (r *Reconciler) Deploy(ctx context.Context, project *types.Project) error {
 		}
 
 		svc.Labels[LabelStackHash] = stackHash
-		svc.Labels[LabelManaged] = ManagedValue
+		svc.Labels[LabelManaged] = ValueTrue
 		svc.Labels[LabelAppVersion] = version.Version
 		svc.Labels[LabelDeployedAt] = deployedAt
 

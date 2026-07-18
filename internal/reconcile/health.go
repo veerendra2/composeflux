@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/docker/compose/v5/pkg/api"
+	dockertypes "github.com/docker/docker/api/types/container"
 )
 
 // ReconcileHealth checks all composeflux-managed containers and redeploys unhealthy stacks
@@ -70,8 +71,8 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 }
 
 // groupContainersByProject groups containers by com.docker.compose.project label
-func (r *Reconciler) groupContainersByProject(containers []api.ContainerSummary) map[string][]api.ContainerSummary {
-	groups := make(map[string][]api.ContainerSummary)
+func (r *Reconciler) groupContainersByProject(containers []dockertypes.Summary) map[string][]dockertypes.Summary {
+	groups := make(map[string][]dockertypes.Summary)
 	for _, c := range containers {
 		project := c.Labels["com.docker.compose.project"]
 		if project == "" {
