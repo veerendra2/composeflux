@@ -1,18 +1,40 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/docker/compose/v5/pkg/api"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
+)
+
+const (
+	StateRunning = "running"
+	StateExited  = "exited"
+	Unhealthy    = "unhealthy"
 )
 
 var (
 	defaultFileNames         = []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
 	defaultOverrideFileNames = []string{"compose.override.yml", "compose.override.yaml", "docker-compose.override.yml", "docker-compose.override.yaml"}
 )
+
+type StackStateMap map[string]StackInfo
+
+type StackInfo struct {
+	Hash       string
+	Healthy    bool
+	Suspend    bool
+	WorkingDir string
+}
+
+// isManagedStack checks if the stack is managed by composeflux via container labels.
+func isManagedStack(containers []api.ContainerSummary) bool {
+	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ValueTrue
+}
 
 // findExistingFiles finds files in given directory and returns slice of matched files
 func findExistingFiles(dirPath string, fileNames []string) []string {
@@ -74,4 +96,70 @@ func (r *Reconciler) discoverComposeStack(envs []string) ([]dockercompose.Compos
 	}
 
 	return stacks, nil
+}
+
+// getStackStates returns a StackStateMap keyed by stack name containing each stack's hash
+func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) {
+	stackStateMap := make(StackStateMap)
+	stacks, err := r.dClient.List(ctx)
+	if err != nil {
+		return stackStateMap, err
+	}
+
+	for _, stack := range stacks {
+		containers, err := r.dClient.Ps(ctx, stack.Name)
+		if err != nil {
+			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
+			continue
+		}
+
+		// Ignore the stack if it's not managed by composeflux
+		if !isManagedStack(containers) {
+			continue
+		}
+
+		containerHash := ""
+		if hash, ok := containers[0].Labels[LabelStackHash]; ok {
+			containerHash = hash
+		}
+
+		workingDir := ""
+		if dir, ok := containers[0].Labels[LabelDockerComposeWorkingDir]; ok {
+			workingDir = dir
+		}
+
+		stackHealthy := true
+		stackSuspend := false
+		for _, container := range containers {
+			if !isContainerHealthy(container) {
+				slog.Debug("Container is not healthy", "stack_name", stack.Name, "container", container.Name,
+					"exit_code", container.ExitCode, "status", container.State, "container_health", container.Health,
+				)
+				stackHealthy = false
+			}
+			if container.Labels[LabelSuspend] == ValueTrue {
+				stackSuspend = true
+			}
+		}
+
+		stackStateMap[stack.Name] = StackInfo{
+			Hash:       containerHash,
+			Healthy:    stackHealthy,
+			Suspend:    stackSuspend,
+			WorkingDir: workingDir,
+		}
+	}
+	return stackStateMap, nil
+}
+
+func isContainerHealthy(container api.ContainerSummary) bool {
+	if container.ExitCode == 0 && container.State == StateRunning {
+		return true
+	} else if container.Labels[LabelInit] == ValueTrue && container.ExitCode == 0 && container.State == StateExited {
+		return true
+	} else if container.Health != Unhealthy {
+		return true
+	}
+
+	return false
 }
