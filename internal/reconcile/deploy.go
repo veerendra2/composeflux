@@ -19,8 +19,6 @@ const (
 	LabelSuspend            = "composeflux.suspend"
 	LabelInit               = "composeflux.init"
 	ValueTrue               = "true"
-
-	LabelDockerComposeWorkingDir = "com.docker.compose.project.working_dir"
 )
 
 // projectChecksum computes sha256 of docker compose yaml content

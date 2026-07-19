@@ -25,27 +25,9 @@ var (
 type StackStateMap map[string]StackInfo
 
 type StackInfo struct {
-	Hash       string
-	Healthy    bool
-	Suspend    bool
-	WorkingDir string
-}
-
-// isManagedStack checks if the stack is managed by composeflux via container labels.
-func isManagedStack(containers []api.ContainerSummary) bool {
-	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ValueTrue
-}
-
-// findExistingFiles finds files in given directory and returns slice of matched files
-func findExistingFiles(dirPath string, fileNames []string) []string {
-	var found []string
-	for _, fileName := range fileNames {
-		fullPath := filepath.Join(dirPath, fileName)
-		if _, err := os.Stat(fullPath); err == nil {
-			found = append(found, fullPath)
-		}
-	}
-	return found
+	Hash    string
+	Healthy bool
+	Suspend bool
 }
 
 // buildComposeConfig builds `dockercompose.ComposeConfig` for given directory if compose files exists
@@ -123,11 +105,6 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 			containerHash = hash
 		}
 
-		workingDir := ""
-		if dir, ok := containers[0].Labels[LabelDockerComposeWorkingDir]; ok {
-			workingDir = dir
-		}
-
 		stackHealthy := true
 		stackSuspend := false
 		for _, container := range containers {
@@ -143,13 +120,29 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 		}
 
 		stackStateMap[stack.Name] = StackInfo{
-			Hash:       containerHash,
-			Healthy:    stackHealthy,
-			Suspend:    stackSuspend,
-			WorkingDir: workingDir,
+			Hash:    containerHash,
+			Healthy: stackHealthy,
+			Suspend: stackSuspend,
 		}
 	}
 	return stackStateMap, nil
+}
+
+// findExistingFiles finds files in given directory and returns slice of matched files
+func findExistingFiles(dirPath string, fileNames []string) []string {
+	var found []string
+	for _, fileName := range fileNames {
+		fullPath := filepath.Join(dirPath, fileName)
+		if _, err := os.Stat(fullPath); err == nil {
+			found = append(found, fullPath)
+		}
+	}
+	return found
+}
+
+// isManagedStack checks if the stack is managed by composeflux via container labels.
+func isManagedStack(containers []api.ContainerSummary) bool {
+	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ValueTrue
 }
 
 func isContainerHealthy(container api.ContainerSummary) bool {
