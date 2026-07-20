@@ -114,6 +114,9 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 		slog.Info("Successfully deployed the stack", "stack_name", name)
 	}
 
+	// Reset health fail counters — Git sync is the authoritative source of truth
+	clear(r.healthFailCounts)
+
 	// Prune stacks which are not in the Git repository
 	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
 		slog.Error("Failed to prune stacks", "error", err)

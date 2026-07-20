@@ -30,7 +30,7 @@ when a new image digest is detected.
 
 Two additional background loops run independently:
 
-- **Health reconciliation** — checks all managed stacks on `HEALTH_RECONCILE_INTERVAL` (default: 5m) and redeploys any
+- **Health reconciliation** — checks all managed stacks on `HEALTH_RECONCILE_INTERVAL` (disabled by default) and redeploys any
   that are stopped or have exited/dead containers
 - **Docker resource prune** — prunes unused images, volumes, and build cache on `PRUNE_INTERVAL` (default: 24h), but
   only when all managed stacks are healthy (see [Periodic Docker Resource Pruning](#periodic-docker-resource-pruning))
@@ -148,48 +148,74 @@ In addition to Git-triggered syncs, ComposeFlux periodically checks all managed 
 unhealthy. This catches stacks that stopped, crashed, or were manually shut down between git ticks — without relying
 solely on Docker restart policies.
 
-**A stack is considered unhealthy if:**
+**A container is considered healthy if:**
 
-- Its compose status is not `Running`, OR
-- Any container in the stack is in `exited` or `dead` state
+- Its state is `running`, OR
+- Its state is `exited` with exit code 0 **and** it has the `composeflux.init: "true"` label
 
-`restarting` is intentionally not treated as unhealthy — if Docker's restart policy is actively recovering a container,
-ComposeFlux steps aside.
+Everything else (`dead`, `paused`, `exited` without the init label, non-zero exit) is unhealthy. A stack is unhealthy
+if any of its containers are unhealthy.
+
+`restarting` containers are unhealthy — they are not `running`. If you want Docker's own restart policy to handle
+recovery without ComposeFlux intervening, use the [Suspend Label](#suspend-label) to pause health reconciliation for
+that stack.
+
+**Init containers:** If your stack uses init containers (short-lived containers that run setup tasks and exit), mark them
+with the `composeflux.init: "true"` label so ComposeFlux treats a clean exit (code 0) as healthy:
+
+```yaml
+services:
+  migrate:
+    image: flyway:latest
+    labels:
+      composeflux.init: "true"
+  app:
+    image: myapp:latest
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+```
+
+Without this label, an exited container (even with exit code 0) is treated as unhealthy and triggers a redeploy.
 
 **Recovery action:** ComposeFlux calls `docker compose up` using the existing project config (no git pull). The git
 ticker continues to handle source drift independently.
 
-Configure the check interval with `HEALTH_RECONCILE_INTERVAL` (default: `5m`).
+**Max attempts:** After 3 consecutive deploy failures for a stack, health reconciliation skips that stack and logs a
+warning. The counter resets on the next successful git sync or successful image update.
+
+Configure the check interval with `HEALTH_RECONCILE_INTERVAL` (default: disabled). Set to e.g. `5m` to enable.
 
 ## Suspend Label
 
-You can pause reconciliation for a specific stack by setting the `composeflux.suspend=true` label on any container in
-that stack via the Docker CLI:
+You can pause reconciliation for a specific stack by adding the `composeflux.suspend: "true"` label to any service in
+the stack's compose file:
 
-```bash
-docker update --label-add composeflux.suspend=true <container-name>
+```yaml
+services:
+  db:
+    image: postgres:15
+    labels:
+      composeflux.suspend: "true"
 ```
+
+Commit the change — ComposeFlux will redeploy with the label applied. To resume reconciliation, remove the label and
+commit again.
 
 **When any container in a stack has this label:**
 
 - The health reconciliation loop skips that stack entirely
 - The Docker resource prune loop aborts and skips pruning for the entire run
 
-This is useful during maintenance operations — for example, stopping a database container for a backup (`docker stop
-postgres`) without triggering an immediate reconcile that would restart it.
-
-To resume reconciliation, remove the label:
-
-```bash
-docker update --label-rm composeflux.suspend <container-name>
-```
+This is useful during maintenance operations — for example, labelling a database service as suspended before stopping it
+for a backup (`docker stop postgres`) without triggering an immediate reconcile that would restart it.
 
 ## Periodic Docker Resource Pruning
 
 When `PRUNE_INTERVAL` is set, ComposeFlux runs a periodic prune cycle (default: every `24h`, configurable via
-`PRUNE_INTERVAL`) to reclaim disk space from unused Docker resources. Unset `PRUNE_INTERVAL` to disable pruning entirely.
+`PRUNE_INTERVAL`) to reclaim disk space from unused Docker resources. Set `PRUNE_INTERVAL=0` to disable pruning entirely.
 
-**What is pruned:** images (including non-dangling), volumes, build cache. Containers and networks are not pruned.
+**What is pruned:** dangling (untagged) images, volumes, build cache. Containers and networks are not pruned.
 
 **Safety guard:** The prune cycle only runs when **all** composeflux-managed stacks are healthy. If any stack is
 stopped, degraded, or has the `composeflux.suspend=true` label set, the prune cycle is skipped for that interval and

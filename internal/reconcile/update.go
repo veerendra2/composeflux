@@ -61,6 +61,7 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 			continue
 		}
 
+		r.healthFailCounts[project.Name] = 0
 		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
 	}
 

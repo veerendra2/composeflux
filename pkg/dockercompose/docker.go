@@ -25,33 +25,20 @@ func (c *client) ListContainers(ctx context.Context, labels []string) ([]contain
 }
 
 func (c *client) Prune(ctx context.Context) {
-	f := mobyClient.Filters{}
-
-	// Container Prune
-	_, err := c.docker.ContainerPrune(ctx, mobyClient.ContainerPruneOptions{Filters: f})
-	if err != nil {
-		slog.Warn("Failed to prune containers", "error", err)
-	}
-
-	// Network Prune
-	_, err = c.docker.NetworkPrune(ctx, mobyClient.NetworkPruneOptions{Filters: f})
-	if err != nil {
-		slog.Warn("Failed to prune networks", "error", err)
-	}
+	// Container and Network prune skipped intentionally — these resources cannot be safely
+	// filtered by composeflux label, and pruning unmanaged stopped containers/networks is unsafe.
+	// _, err := c.docker.ContainerPrune(ctx, mobyClient.ContainerPruneOptions{})
+	// _, err := c.docker.NetworkPrune(ctx, mobyClient.NetworkPruneOptions{})
 
 	// Volume Prune
-	_, err = c.docker.VolumePrune(ctx, mobyClient.VolumePruneOptions{Filters: f})
-	if err != nil {
+	if _, err := c.docker.VolumePrune(ctx, mobyClient.VolumePruneOptions{}); err != nil {
 		slog.Warn("Failed to prune volumes", "error", err)
 	}
 
-	// Image Prune
-	// Note: We only prune dangling (untagged) images here to be safe. Downloaded images
-	// don't carry our label, so we can't filter by it.
+	// Image Prune — only dangling (untagged) images; tagged images can't be filtered by our label
 	pruneAllFilter := mobyClient.Filters{}
 	pruneAllFilter.Add("dangling", "true")
-	_, err = c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{Filters: pruneAllFilter})
-	if err != nil {
+	if _, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{Filters: pruneAllFilter}); err != nil {
 		slog.Warn("Failed to prune images", "error", err)
 	}
 

@@ -14,7 +14,6 @@ import (
 const (
 	StateRunning = "running"
 	StateExited  = "exited"
-	Unhealthy    = "unhealthy"
 )
 
 var (
@@ -95,7 +94,8 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 			continue
 		}
 
-		// Ignore the stack if it's not managed by composeflux
+		// Ignore the stack if it's not managed by composeflux.
+		// isManagedStack guarantees len(containers) > 0, so containers[0] below is safe.
 		if !isManagedStack(containers) {
 			continue
 		}
@@ -146,11 +146,9 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 }
 
 func isContainerHealthy(container api.ContainerSummary) bool {
-	if container.ExitCode == 0 && container.State == StateRunning {
+	if container.State == StateRunning {
 		return true
 	} else if container.Labels[LabelInit] == ValueTrue && container.ExitCode == 0 && container.State == StateExited {
-		return true
-	} else if container.Health != Unhealthy {
 		return true
 	}
 

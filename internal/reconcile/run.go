@@ -19,8 +19,13 @@ func (r *Reconciler) Run(ctx context.Context) {
 	gitTicker := time.NewTicker(r.gitInterval)
 	defer gitTicker.Stop()
 
-	healthTicker := time.NewTicker(r.healthInterval)
-	defer healthTicker.Stop()
+	// nil channel blocks forever — safe to use in select when HEALTH_RECONCILE_INTERVAL is 0
+	var healthTickerC <-chan time.Time
+	if r.healthInterval != 0 {
+		healthTicker := time.NewTicker(r.healthInterval)
+		defer healthTicker.Stop()
+		healthTickerC = healthTicker.C
+	}
 
 	// nil channel blocks forever — safe to use in select when PRUNE_INTERVAL is unset
 	var pruneTickerC <-chan time.Time
@@ -77,7 +82,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 				}
 			}()
 
-		case <-healthTicker.C:
+		case <-healthTickerC:
 			func() {
 				hCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 				defer cancel()

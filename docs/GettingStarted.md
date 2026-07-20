@@ -53,7 +53,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `GIT_SSH_KEY_PATH`          | SSH key path inside container                                                                                                 | `/.ssh/composeflux_id_rsa` |
 | `GIT_CLONE_PATH`            | Local clone directory                                                                                                         | `/opt/compose-stack`       |
 | `GIT_INTERVAL`              | Git sync interval                                                                                                             | `5m`                       |
-| `HEALTH_RECONCILE_INTERVAL` | Interval for proactive stack health reconciliation. ComposeFlux redeploys any stack that is stopped or has exited/dead containers. | `5m`                  |
+| `HEALTH_RECONCILE_INTERVAL` | Interval for proactive stack health reconciliation. ComposeFlux redeploys any stack with a non-running container (unless it is a completed init container). Set to e.g. `5m` to enable. | disabled          |
 | `IMAGE_UPDATE_SCHEDULE`     | Cron expression for Docker image update checks, e.g. `0 3 * * *`. Empty = disabled.                                           | `""`                       |
 | `GIT_BRANCH`                | Git branch to track                                                                                                           | `main`                     |
 | `CONFIG_FILE`               | Stack config file name (see [Stack Configuration](Introduction.md#stack-configuration))                                       | `stack.yml`                |
@@ -66,7 +66,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 !!! warning
 
-    When `PRUNE_INTERVAL` is set, pruning removes **all unused Docker resources** including images, volumes, and build cache. Any image not used by a running container will be deleted. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.suspend=true` label set.
+    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.suspend=true` label set.
 
 ## Commands
 

@@ -23,11 +23,11 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 	// See https://github.com/veerendra2/composeflux/issues/31
 	for stackName, status := range stackStatuses {
 		if !status.Healthy {
-			slog.Warn("Stack is unhealth, skip pruning", "stack_name", stackName)
+			slog.Warn("Skipping prune", "reason", "unhealthy stack", "stack_name", stackName)
 			return nil
 		}
 		if status.Suspend {
-			slog.Warn("Stack is suspended, skip pruning", "stack_name", stackName)
+			slog.Warn("Skipping prune", "reason", "suspended stack", "stack_name", stackName)
 			return nil
 		}
 	}

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+const maxHealthReconcileAttempts = 3
+
 func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
@@ -16,7 +18,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 		return err
 	}
 
-	toReconcile := []string{}
+	var toReconcile []string
 
 	for stackName, status := range stackStatuses {
 		if !status.Healthy && !status.Suspend {
@@ -31,10 +33,16 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 		}
 
 		for _, stackName := range toReconcile {
+			if r.healthFailCounts[stackName] >= maxHealthReconcileAttempts {
+				slog.Warn("Max health reconcile attempts reached, skipping stack",
+					"stack_name", stackName, "attempts", r.healthFailCounts[stackName])
+				continue
+			}
+
 			stackPath := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
 			stat, err := os.Stat(stackPath)
-			if err != nil && !stat.IsDir() {
-				slog.Warn("Stack path not found", "stack_name", stackName, "stack_path", stackPath, "error", err)
+			if err != nil || !stat.IsDir() {
+				slog.Warn("Stack path not found or not a directory", "stack_name", stackName, "stack_path", stackPath, "error", err)
 				continue
 			}
 
@@ -51,9 +59,13 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 			}
 
 			if err := r.Deploy(ctx, project); err != nil {
-				slog.Warn("Failed to deploy the stack", "stack_name", stackName, "error", err)
+				r.healthFailCounts[stackName]++
+				slog.Warn("Failed to deploy the stack", "stack_name", stackName,
+					"attempt", r.healthFailCounts[stackName], "error", err)
 				continue
 			}
+
+			r.healthFailCounts[stackName] = 0
 		}
 	}
 
