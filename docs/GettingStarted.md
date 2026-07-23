@@ -178,6 +178,10 @@ services:
       # INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
       # INFISICAL_SITE_URL: https://app.infisical.com
 
+      # Reconciliation & Pruning
+      # HEALTH_RECONCILE_INTERVAL: 5m  # Proactive health check interval (disabled by default)
+      # PRUNE_INTERVAL: 24h           # Periodic Docker resource prune interval (24h default, 0 to disable)
+
       # Logging
       # LOG_LEVEL: info
       # LOG_FORMAT: console           # console or json
