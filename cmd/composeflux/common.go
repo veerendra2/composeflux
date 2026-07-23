@@ -128,6 +128,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 
 	slog.Info("Reconciler configured", "stack_path", c.Reconciler.StackPath, "config_file", c.Reconciler.ConfigFile,
 		"secrets_manager", c.Secrets.Provider, "git_poll_interval", c.Reconciler.GitInterval,
+		"health_reconcile_interval", c.Reconciler.HealthInterval, "prune_interval", c.Reconciler.PruneInterval,
 		"image_update_cron", c.Reconciler.ImageUpdateSchedule)
 
 	return rClient, cleanup, nil

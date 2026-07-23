@@ -15,7 +15,7 @@ type Config struct {
 	GitInterval         time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
 	HealthInterval      time.Duration `name:"health-interval" help:"Interval for proactive stack health reconciliation. Set to 0 to disable." env:"HEALTH_RECONCILE_INTERVAL" default:"0" group:"Reconciler Options:"`
 	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
-	PruneInterval       time.Duration `name:"prune-interval" help:"Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all stacks are healthy. Empty = disabled." env:"PRUNE_INTERVAL" default:"24h" group:"Reconciler Options:"`
+	PruneInterval       time.Duration `name:"prune-interval" help:"Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all stacks are healthy. Set to 0 to disable." env:"PRUNE_INTERVAL" default:"24h" group:"Reconciler Options:"`
 }
 
 type Reconciler struct {
