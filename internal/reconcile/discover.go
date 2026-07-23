@@ -14,6 +14,7 @@ import (
 const (
 	StateRunning = "running"
 	StateExited  = "exited"
+	Unhealthy    = "unhealthy"
 )
 
 var (
@@ -146,8 +147,8 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 }
 
 func isContainerHealthy(container api.ContainerSummary) bool {
-	if container.State == StateRunning {
-		return true
+	if container.ExitCode == 0 && container.State == StateRunning {
+		return container.Health != Unhealthy
 	} else if container.Labels[LabelInit] == ValueTrue && container.ExitCode == 0 && container.State == StateExited {
 		return true
 	}

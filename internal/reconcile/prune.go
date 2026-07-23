@@ -14,14 +14,30 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
+	envs, _, err := r.loadEnvAndConfig()
+	if err != nil {
+		return err
+	}
+
+	srcStacks, err := r.discoverComposeStack(envs)
+	if err != nil {
+		return err
+	}
+
 	stackStatuses, err := r.getStackStates(ctx)
 	if err != nil {
 		return err
 	}
 
-	// We skip pruning if any stack is unhealthy or any suspend label exists for any stacks
+	// We skip pruning if any stack is missing from Docker, unhealthy, or suspended
 	// See https://github.com/veerendra2/composeflux/issues/31
-	for stackName, status := range stackStatuses {
+	for _, src := range srcStacks {
+		stackName := filepath.Base(src.WorkingDir)
+		status, exists := stackStatuses[stackName]
+		if !exists {
+			slog.Warn("Skipping prune", "reason", "stack not running in docker", "stack_name", stackName)
+			return nil
+		}
 		if !status.Healthy {
 			slog.Warn("Skipping prune", "reason", "unhealthy stack", "stack_name", stackName)
 			return nil

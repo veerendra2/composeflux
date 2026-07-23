@@ -18,7 +18,6 @@ import (
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
 	dockerregistry "github.com/docker/docker/registry"
-	"github.com/moby/moby/api/types/container"
 	mobyClient "github.com/moby/moby/client"
 	"github.com/sirupsen/logrus"
 )
@@ -37,7 +36,6 @@ type Client interface {
 	Restart(ctx context.Context, projectName string) error
 	Up(ctx context.Context, project *types.Project) error
 
-	ListContainers(ctx context.Context, labels []string) ([]container.Summary, error)
 	Prune(ctx context.Context)
 	Version(ctx context.Context) ([]any, error)
 }

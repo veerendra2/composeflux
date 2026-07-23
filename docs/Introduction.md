@@ -110,6 +110,7 @@ With this configuration, Traefik deploys first, then the rest of the stacks depl
 - Scoped to `STACK_PATH` only - doesn't affect other directories
 - Names in `startup_order` must match directory names exactly
 - No need to list all stacks - only ones requiring specific order
+- Do not set a custom `name:` in your `compose.yml`. The Docker Compose project name must match the stack directory name.
 
 ## Multi-Server Setup
 

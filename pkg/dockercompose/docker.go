@@ -4,25 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/moby/moby/api/types/container"
 	mobyClient "github.com/moby/moby/client"
 )
-
-func (c *client) ListContainers(ctx context.Context, labels []string) ([]container.Summary, error) {
-	f := mobyClient.Filters{}
-	for _, l := range labels {
-		f.Add("label", l)
-	}
-
-	res, err := c.docker.ContainerList(ctx, mobyClient.ContainerListOptions{
-		All:     true,
-		Filters: f,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return res.Items, nil
-}
 
 func (c *client) Prune(ctx context.Context) {
 	// Container and Network prune skipped intentionally — these resources cannot be safely
