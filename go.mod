@@ -3,12 +3,12 @@ module github.com/veerendra2/composeflux
 go 1.26
 
 require (
-	github.com/docker/cli v29.6.1+incompatible
+	github.com/docker/cli v29.6.2+incompatible
 	github.com/docker/compose/v5 v5.3.1
 )
 
 require (
-	github.com/alecthomas/kong v1.15.0
+	github.com/alecthomas/kong v1.16.0
 	github.com/bitwarden/sdk-go/v2 v2.1.0
 	github.com/compose-spec/compose-go/v2 v2.13.0
 	github.com/distribution/reference v0.6.0
