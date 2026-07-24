@@ -3,12 +3,12 @@ module github.com/veerendra2/composeflux
 go 1.26
 
 require (
-	github.com/docker/cli v29.6.1+incompatible
-	github.com/docker/compose/v5 v5.3.0
+	github.com/docker/cli v29.6.2+incompatible
+	github.com/docker/compose/v5 v5.3.1
 )
 
 require (
-	github.com/alecthomas/kong v1.15.0
+	github.com/alecthomas/kong v1.16.0
 	github.com/bitwarden/sdk-go/v2 v2.1.0
 	github.com/compose-spec/compose-go/v2 v2.13.0
 	github.com/distribution/reference v0.6.0
@@ -113,7 +113,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mattn/go-shellwords v1.0.13 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
-	github.com/moby/buildkit v0.31.0 // indirect
+	github.com/moby/buildkit v0.31.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
@@ -124,7 +124,7 @@ require (
 	github.com/moby/sys/sequential v0.7.0 // indirect
 	github.com/moby/sys/signal v0.7.1 // indirect
 	github.com/moby/sys/symlink v0.3.0 // indirect
-	github.com/moby/sys/user v0.4.0 // indirect
+	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
