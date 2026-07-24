@@ -66,7 +66,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 !!! warning
 
-    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.suspend=true` label set.
+    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.health.suspend=true` label set.
 
 ## Commands
 

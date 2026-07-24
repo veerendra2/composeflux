@@ -16,7 +16,7 @@ const (
 	LabelManaged            = "composeflux.managed"
 	LabelStackHash          = "composeflux.stack-hash"
 	LabelImageUpdateExclude = "composeflux.image-update.exclude"
-	LabelSuspend            = "composeflux.suspend"
+	LabelSuspend            = "composeflux.health.suspend"
 	LabelInit               = "composeflux.init"
 	ValueTrue               = "true"
 )

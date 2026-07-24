@@ -187,9 +187,9 @@ warning. The counter resets on the next successful git sync or successful image 
 
 Configure the check interval with `HEALTH_RECONCILE_INTERVAL` (default: disabled). Set to e.g. `5m` to enable.
 
-## Suspend Label
+## Health Suspend Label
 
-You can pause reconciliation for a specific stack by adding the `composeflux.suspend: "true"` label to any service in
+You can pause reconciliation for a specific stack by adding the `composeflux.health.suspend: "true"` label to any service in
 the stack's compose file:
 
 ```yaml
@@ -197,7 +197,7 @@ services:
   db:
     image: postgres:15
     labels:
-      composeflux.suspend: "true"
+      composeflux.health.suspend: "true"
 ```
 
 Commit the change — ComposeFlux will redeploy with the label applied. To resume reconciliation, remove the label and
@@ -219,7 +219,7 @@ When `PRUNE_INTERVAL` is set, ComposeFlux runs a periodic prune cycle (default: 
 **What is pruned:** dangling (untagged) images, volumes, build cache. Containers and networks are not pruned.
 
 **Safety guard:** The prune cycle only runs when **all** composeflux-managed stacks are healthy. If any stack is
-stopped, degraded, or has the `composeflux.suspend=true` label set, the prune cycle is skipped for that interval and
+stopped, degraded, or has the `composeflux.health.suspend=true` label set, the prune cycle is skipped for that interval and
 a warning is logged.
 
 ## Blog Posts
