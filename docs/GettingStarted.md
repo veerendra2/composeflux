@@ -53,6 +53,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `GIT_SSH_KEY_PATH`          | SSH key path inside container                                                                                                 | `/.ssh/composeflux_id_rsa` |
 | `GIT_CLONE_PATH`            | Local clone directory                                                                                                         | `/opt/compose-stack`       |
 | `GIT_INTERVAL`              | Git sync interval                                                                                                             | `5m`                       |
+| `HEALTH_RECONCILE_INTERVAL` | Interval for proactive stack health reconciliation. ComposeFlux redeploys any stack with a non-running container (unless it is a completed init container). Set to e.g. `5m` to enable. | disabled          |
 | `IMAGE_UPDATE_SCHEDULE`     | Cron expression for Docker image update checks, e.g. `0 3 * * *`. Empty = disabled.                                           | `""`                       |
 | `GIT_BRANCH`                | Git branch to track                                                                                                           | `main`                     |
 | `CONFIG_FILE`               | Stack config file name (see [Stack Configuration](Introduction.md#stack-configuration))                                       | `stack.yml`                |
@@ -60,12 +61,12 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `LOG_FORMAT`                | Log format (`console`/`json`)                                                                                                 | `console`                  |
 | `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
 | `REMOVE_ORPHANS`            | Remove orphan containers during deploy                                                                                        | `true`                     |
-| `PRUNE_RESOURCES`           | Prune all unused Docker resources during cleanup                                                                              | `true`                     |
+| `PRUNE_INTERVAL`            | Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all managed stacks are healthy. Set to `0` to disable. | `24h`       |
 | `METRICS_ADDR`              | Prometheus metrics listen address. Empty to disable.                                                                          | `:9090`                    |
 
 !!! warning
 
-    When `PRUNE_RESOURCES=true`, pruning removes **all unused Docker resources** including images, containers, volumes, networks, and build cache. Any image not used by a running container will be deleted.
+    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.health.suspend=true` label set.
 
 ## Commands
 
@@ -176,6 +177,10 @@ services:
       # INFISICAL_ENVIRONMENT: ${INFISICAL_ENVIRONMENT}
       # INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
       # INFISICAL_SITE_URL: https://app.infisical.com
+
+      # Reconciliation & Pruning
+      # HEALTH_RECONCILE_INTERVAL: 5m  # Proactive health check interval (disabled by default)
+      # PRUNE_INTERVAL: 24h           # Periodic Docker resource prune interval (24h default, 0 to disable)
 
       # Logging
       # LOG_LEVEL: info

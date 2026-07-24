@@ -13,8 +13,9 @@ type Config struct {
 	StackPath           string        `name:"stack-path" help:"Path to compose stack directory in git repository" env:"STACK_PATH" required:"" group:"Reconciler Options:"`
 	ConfigFile          string        `name:"config-file" help:"Stack configuration file name" env:"CONFIG_FILE" default:"stack.yml" group:"Reconciler Options:"`
 	GitInterval         time.Duration `name:"git-interval" help:"Git repository polling interval" env:"GIT_INTERVAL" default:"5m" group:"Reconciler Options:"`
+	HealthInterval      time.Duration `name:"health-interval" help:"Interval for proactive stack health reconciliation. Set to 0 to disable." env:"HEALTH_RECONCILE_INTERVAL" default:"0" group:"Reconciler Options:"`
 	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
-	PruneResources      bool          `name:"prune-resources" help:"Prune all unused Docker resources (containers, images, volumes, networks, build cache) during cleanup" env:"PRUNE_RESOURCES" default:"true" group:"Reconciler Options:"`
+	PruneInterval       time.Duration `name:"prune-interval" help:"Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all stacks are healthy. Set to 0 to disable." env:"PRUNE_INTERVAL" default:"24h" group:"Reconciler Options:"`
 }
 
 type Reconciler struct {
@@ -22,14 +23,16 @@ type Reconciler struct {
 	stackPath  string
 
 	gitInterval         time.Duration
+	healthInterval      time.Duration
 	imageUpdateSchedule string
-	pruneResources      bool
+	pruneInterval       time.Duration
 
 	dClient dockercompose.Client
 	gClient source.Client
 	sClient secrets.Client
 
-	reconcileMu sync.Mutex
+	reconcileMu      sync.Mutex
+	healthFailCounts map[string]int
 }
 
 func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dockercompose.Client) (*Reconciler, error) {
@@ -38,11 +41,14 @@ func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dock
 		stackPath:  cfg.StackPath,
 
 		gitInterval:         cfg.GitInterval,
+		healthInterval:      cfg.HealthInterval,
 		imageUpdateSchedule: cfg.ImageUpdateSchedule,
-		pruneResources:      cfg.PruneResources,
+		pruneInterval:       cfg.PruneInterval,
 
 		dClient: dClient,
 		gClient: gClient,
 		sClient: sClient,
+
+		healthFailCounts: make(map[string]int),
 	}, nil
 }
