@@ -6,19 +6,55 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/compose/v5/pkg/api"
-
 	"github.com/veerendra2/composeflux/internal/metrics"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
-// isManagedStack checks if the stack is managed by composeflux via container labels.
-func isManagedStack(containers []api.ContainerSummary) bool {
-	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ManagedValue
+func (r *Reconciler) PruneResources(ctx context.Context) error {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+
+	envs, _, err := r.loadEnvAndConfig()
+	if err != nil {
+		return err
+	}
+
+	srcStacks, err := r.discoverComposeStack(envs)
+	if err != nil {
+		return err
+	}
+
+	stackStatuses, err := r.getStackStates(ctx)
+	if err != nil {
+		return err
+	}
+
+	// We skip pruning if any stack is missing from Docker, unhealthy, or suspended
+	// See https://github.com/veerendra2/composeflux/issues/31
+	for _, src := range srcStacks {
+		stackName := filepath.Base(src.WorkingDir)
+		status, exists := stackStatuses[stackName]
+		if !exists {
+			slog.Warn("Skipping prune", "reason", "stack not running in docker", "stack_name", stackName)
+			return nil
+		}
+		if !status.Healthy {
+			slog.Warn("Skipping prune", "reason", "unhealthy stack", "stack_name", stackName)
+			return nil
+		}
+		if status.Suspend {
+			slog.Warn("Skipping prune", "reason", "suspended stack", "stack_name", stackName)
+			return nil
+		}
+	}
+
+	slog.Info("Pruning unused Docker resources")
+	r.dClient.Prune(ctx)
+	return nil
 }
 
 // Prune deletes the running stacks which are not in the source repository
-func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
+func (r *Reconciler) PruneStacks(ctx context.Context, srcStack []dockercompose.ComposeConfig) error {
 	runningStack, err := r.dClient.List(ctx)
 	if err != nil {
 		return err
@@ -60,48 +96,5 @@ func (r *Reconciler) Prune(ctx context.Context, srcStack []dockercompose.Compose
 		slog.Info("Pruned stacks", "count", len(prunedStacks), "stack_names", strings.Join(prunedStacks, ","))
 	}
 
-	// Prune unused Docker resources (containers, images, volumes, networks, build cache)
-	if r.pruneResources {
-		r.dClient.Prune(ctx)
-	}
-
 	return nil
-}
-
-type StackStateMap map[string]StackInfo
-
-type StackInfo struct {
-	Hash string
-}
-
-// getStackStates returns a StackStateMap keyed by stack name containing each stack's hash
-func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) {
-	stackStateMap := make(StackStateMap)
-	stacks, err := r.dClient.List(ctx)
-	if err != nil {
-		return stackStateMap, err
-	}
-
-	for _, stack := range stacks {
-		containers, err := r.dClient.Ps(ctx, stack.Name)
-		if err != nil {
-			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
-			continue
-		}
-
-		// Ignore the stack if it's not managed by composeflux
-		if !isManagedStack(containers) {
-			continue
-		}
-
-		containerHash := ""
-		if hash, ok := containers[0].Labels[LabelStackHash]; ok {
-			containerHash = hash
-		}
-
-		stackStateMap[stack.Name] = StackInfo{
-			Hash: containerHash,
-		}
-	}
-	return stackStateMap, nil
 }
