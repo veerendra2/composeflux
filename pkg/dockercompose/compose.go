@@ -69,6 +69,65 @@ func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*ty
 	})
 }
 
+// GetDependencyPaths extracts all file paths that this compose project depends on
+// (compose files, included files, env files, bind mount host sources, config/secret files, build context/dockerfiles).
+func GetDependencyPaths(project *types.Project) []string {
+	if project == nil {
+		return nil
+	}
+
+	pathSet := make(map[string]struct{})
+
+	addPath := func(p string) {
+		if p == "" {
+			return
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(project.WorkingDir, p)
+		}
+		cleaned := filepath.Clean(p)
+		pathSet[cleaned] = struct{}{}
+	}
+
+	for _, f := range project.ComposeFiles {
+		addPath(f)
+	}
+
+	for _, cfg := range project.Configs {
+		addPath(cfg.File)
+	}
+	for _, sec := range project.Secrets {
+		addPath(sec.File)
+	}
+
+	for _, svc := range project.Services {
+		for _, envFile := range svc.EnvFiles {
+			addPath(envFile.Path)
+		}
+		for _, vol := range svc.Volumes {
+			if vol.Type == types.VolumeTypeBind {
+				addPath(vol.Source)
+			}
+		}
+		if svc.Build != nil {
+			addPath(svc.Build.Context)
+			if svc.Build.Dockerfile != "" {
+				if filepath.IsAbs(svc.Build.Dockerfile) {
+					addPath(svc.Build.Dockerfile)
+				} else {
+					addPath(filepath.Join(svc.Build.Context, svc.Build.Dockerfile))
+				}
+			}
+		}
+	}
+
+	paths := make([]string, 0, len(pathSet))
+	for p := range pathSet {
+		paths = append(paths, p)
+	}
+	return paths
+}
+
 func (c *client) Down(ctx context.Context, projectName string) error {
 	return c.compose.Down(ctx, projectName, api.DownOptions{
 		RemoveOrphans: c.removeOrphans,

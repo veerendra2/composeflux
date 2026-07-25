@@ -11,6 +11,7 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/veerendra2/composeflux/internal/metrics"
+	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
 // GitSync pulls changes from the Git repository and deploys stacks which are changed or new
@@ -18,8 +19,18 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	if err := r.gClient.Pull(ctx); err != nil {
+	changedFiles, err := r.gClient.Pull(ctx)
+	if err != nil {
 		return err
+	}
+
+	repoPath := r.gClient.Path()
+
+	// Convert relative git changed files to absolute cleaned paths
+	changedPathMap := make(map[string]struct{})
+	for _, f := range changedFiles {
+		absPath := filepath.Clean(filepath.Join(repoPath, f))
+		changedPathMap[absPath] = struct{}{}
 	}
 
 	envs, startupOrder, err := r.loadEnvAndConfig()
@@ -61,23 +72,36 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 			continue
 		}
 
-		sourceHash, err := projectChecksum(project)
-		if err != nil {
-			slog.Warn("Failed to calculate project checksum, deploying stack anyway",
-				"stack_name", project.Name, "error", err)
-			// Deploy anyway if hash calculation fails
-			toDeploy[project.Name] = project
-			continue
-		}
-
-		if stackInfo, exists := currentStackMap[project.Name]; exists {
-			if stackInfo.Hash != sourceHash {
-				slog.Info("Stack hash changed, redeploying", "stack_name", project.Name)
-				toDeploy[project.Name] = project
-			}
-		} else {
+		// Check if stack needs deployment
+		if _, exists := currentStackMap[project.Name]; !exists {
 			slog.Info("New stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
+		} else if len(changedFiles) > 0 {
+			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
+			deps := dockercompose.GetDependencyPaths(project)
+			hasMatch := false
+			sep := string(filepath.Separator)
+
+			for changedPath := range changedPathMap {
+				for _, dep := range deps {
+					depPrefix := dep
+					if !strings.HasSuffix(depPrefix, sep) {
+						depPrefix += sep
+					}
+
+					if changedPath == dep || strings.HasPrefix(changedPath, depPrefix) {
+						hasMatch = true
+						slog.Info("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dep)
+						break
+					}
+				}
+				if hasMatch {
+					break
+				}
+			}
+			if hasMatch {
+				toDeploy[project.Name] = project
+			}
 		}
 	}
 

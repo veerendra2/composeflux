@@ -17,12 +17,12 @@ automatically deploys stacks when changes are detected.
 ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an initial sync at startup, then checks the
 remote Git repository for changes and syncs again when updates are detected.
 
-1. Pulls latest commits
+1. Pulls latest commits and tracks changed file paths
 2. Fetches secrets from secrets manager
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
 4. Discovers compose stacks (one level deep in `STACK_PATH`)
-5. Calculates SHA256 hash for each stack
-6. Deploys stacks with changed hashes (respects [`startup_order`](#stack-configuration))
+5. Builds dependency file set for each stack (compose files, include blocks, env files, mounted configs, secrets, build context)
+6. Deploys stacks that have file updates or are missing from Docker (respects [`startup_order`](#stack-configuration))
 7. Prunes stacks deleted from Git
 
 Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks
@@ -35,18 +35,20 @@ Two additional background loops run independently:
 - **Docker resource prune** — prunes unused images, volumes, and build cache on `PRUNE_INTERVAL` (default: 24h), but
   only when all managed stacks are healthy (see [Periodic Docker Resource Pruning](#periodic-docker-resource-pruning))
 
-## Hash-Based Change Detection
+## Git Diff & Dependency Change Detection
 
-ComposeFlux uses a hash-based approach to decide whether a stack needs redeploying:
+ComposeFlux uses a Git diff and dependency-tree-based approach to decide whether a stack needs redeploying:
 
-- SHA256 hash is calculated from the entire Compose project (after variable substitution with secrets)
-- **Includes secrets**: The hash includes resolved secrets at sync time. If secrets change, you can run
-  `composeflux sync` (or wait for the next Git change) to fetch them and update the hash.
-- To take full advantage of hash-based detection for app config changes, prefer Docker Compose
-  [`configs`](https://docs.docker.com/reference/compose-file/configs/) in your Compose files instead of mounting plain
-  app config files directly into containers.
-- Stack is redeployed only when the hash changes; otherwise it is skipped (no unnecessary redeployment)
-- Hash is stored in the `composeflux.stack-hash` label on deployed containers
+- **Git Diff Path Matching**: ComposeFlux tracks modified, added, or deleted file paths between Git commits.
+- **Dependency Tree Resolution**: Each stack's Compose project resolves all related file dependencies, including:
+  - Compose files and `include` directives
+  - Environment files (`env_file`)
+  - Mounted configuration files (`configs`) and secrets (`secrets`)
+  - Host bind mounts (`volumes`)
+  - Local build context and Dockerfiles (`build`)
+- **Base / Overlay Support**: Changes in shared base directories (e.g., `base/app1` included by `overlays/prod/app1`) are automatically mapped to dependent stacks.
+- **Targeted Redeployment**: A stack is redeployed only if any changed file in Git overlaps with its dependency file set, or if the stack is missing from Docker.
+
 
 ## Image Update Exclusion
 

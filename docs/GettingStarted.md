@@ -95,7 +95,7 @@ Run "composeflux <command> --help" for more information on a command.
   Git repository for changes at configured intervals (default: 5 minutes).
 - **`sync`** - One-shot sync and deploy. Manually triggers immediate synchronization. Useful when you update secrets in
   your secrets manager but haven't made Git changes. See
-  [Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
+  [Git Diff & Dependency Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ```bash
 # Daemon mode (initial sync at startup, then checks Git every 5 minutes)

@@ -26,8 +26,9 @@ type Config struct {
 }
 
 type Client interface {
-	Pull(ctx context.Context) error
+	Pull(ctx context.Context) ([]string, error)
 	HasUpdates(ctx context.Context) (bool, string, string, error)
+	GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]string, error)
 	Path() string
 }
 
@@ -38,34 +39,98 @@ type client struct {
 	sshAuth *ssh.PublicKeys
 }
 
-// Pull syncs latest changes from remote
-func (c *client) Pull(ctx context.Context) error {
-	err := c.repo.FetchContext(ctx, &git.FetchOptions{
+// Pull syncs latest changes from remote and returns a list of changed relative file paths since previous HEAD.
+func (c *client) Pull(ctx context.Context) ([]string, error) {
+	localRef, err := c.repo.Head()
+	oldSHA := ""
+	if err == nil {
+		oldSHA = localRef.Hash().String()
+	}
+
+	err = c.repo.FetchContext(ctx, &git.FetchOptions{
 		RemoteName: remoteName,
 		Auth:       c.sshAuth,
 		Force:      true, // required for force-pushed branches to update remote tracking refs
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return fmt.Errorf("failed to fetch: %w", err)
+		return nil, fmt.Errorf("failed to fetch: %w", err)
 	}
 
-	// Hard reset to remote tracking ref — handles force-push and cases where
-	// HasUpdates() already fetched (making PullContext return NoErrAlreadyUpToDate early
-	// without actually updating the worktree)
 	remoteRef, err := c.repo.Reference(plumbing.NewRemoteReferenceName(remoteName, c.branch), true)
 	if err != nil {
-		return fmt.Errorf("failed to resolve remote ref: %w", err)
+		return nil, fmt.Errorf("failed to resolve remote ref: %w", err)
+	}
+
+	newSHA := remoteRef.Hash().String()
+
+	var changedFiles []string
+	if oldSHA != "" && oldSHA != newSHA {
+		changedFiles, err = c.GetChangedFiles(ctx, oldSHA, newSHA)
+		if err != nil {
+			slog.Warn("Failed to compute git diff file list", "old_sha", shortSHA(oldSHA), "new_sha", shortSHA(newSHA), "error", err)
+		}
 	}
 
 	w, err := c.repo.Worktree()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset}); err != nil {
-		return fmt.Errorf("failed to reset to %s/%s: %w", remoteName, c.branch, err)
+		return nil, fmt.Errorf("failed to reset to %s/%s: %w", remoteName, c.branch, err)
 	}
-	return nil
+
+	return changedFiles, nil
+}
+
+// GetChangedFiles compares two commit SHAs and returns relative paths of modified, added, or deleted files.
+func (c *client) GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]string, error) {
+	if oldSHA == "" || newSHA == "" || oldSHA == newSHA {
+		return nil, nil
+	}
+
+	oldCommit, err := c.repo.CommitObject(plumbing.NewHash(oldSHA))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old commit %s: %w", oldSHA, err)
+	}
+
+	newCommit, err := c.repo.CommitObject(plumbing.NewHash(newSHA))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new commit %s: %w", newSHA, err)
+	}
+
+	oldTree, err := oldCommit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old tree: %w", err)
+	}
+
+	newTree, err := newCommit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new tree: %w", err)
+	}
+
+	changes, err := oldTree.DiffContext(ctx, newTree)
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff trees: %w", err)
+	}
+
+	var filePaths []string
+	pathMap := make(map[string]struct{})
+
+	for _, change := range changes {
+		if change.From.Name != "" {
+			pathMap[change.From.Name] = struct{}{}
+		}
+		if change.To.Name != "" {
+			pathMap[change.To.Name] = struct{}{}
+		}
+	}
+
+	for path := range pathMap {
+		filePaths = append(filePaths, path)
+	}
+
+	return filePaths, nil
 }
 
 // HasUpdates checks for remote changes and returns update status with short commit SHAs (for logging)
