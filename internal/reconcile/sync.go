@@ -84,6 +84,12 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 
 			for changedPath := range changedPathMap {
 				for _, dep := range deps {
+					// Only consider dependency paths that are inside the git repository
+					rel, err := filepath.Rel(repoPath, dep)
+					if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
+						continue
+					}
+
 					depPrefix := dep
 					if !strings.HasSuffix(depPrefix, sep) {
 						depPrefix += sep
