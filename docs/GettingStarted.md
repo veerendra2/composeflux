@@ -62,7 +62,6 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
 | `REMOVE_ORPHANS`            | Remove orphan containers during deploy                                                                                        | `true`                     |
 | `PRUNE_INTERVAL`            | Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all managed stacks are healthy. Set to `0` to disable. | `24h`       |
-| `METRICS_ADDR`              | Prometheus metrics listen address. Empty to disable.                                                                          | `:9090`                    |
 
 !!! warning
 
@@ -185,12 +184,6 @@ services:
       # Logging
       # LOG_LEVEL: info
       # LOG_FORMAT: console           # console or json
-
-      # Metrics
-      # METRICS_ADDR: ":9090"         # Prometheus metrics endpoint, empty to disable
-
-    ports:
-      - "9090:9090" # Prometheus metrics
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

@@ -30,5 +30,4 @@ and automatically deploy your Docker stacks—all without manual intervention.
 | Secrets Management | Optional Bitwarden Secrets Manager and Infisical support |
 | Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available |
 | Flexible Configuration | Startup order and shared environment variables |
-| Prometheus Metrics | Built-in metrics endpoint for deployment, image update, and prune observability |
 | Simple & Headless | No UI, no backend database |

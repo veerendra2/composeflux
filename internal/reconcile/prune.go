@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/veerendra2/composeflux/internal/metrics"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
@@ -87,7 +86,6 @@ func (r *Reconciler) PruneStacks(ctx context.Context, srcStack []dockercompose.C
 				slog.Warn("Failed to prune stack", "stack_name", stack.Name, "error", err)
 				continue
 			}
-			metrics.StacksPrunedTotal.WithLabelValues(stack.Name).Inc()
 			prunedStacks = append(prunedStacks, stack.Name)
 		}
 	}

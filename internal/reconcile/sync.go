@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
-	"github.com/veerendra2/composeflux/internal/metrics"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
@@ -97,7 +96,7 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 
 					if changedPath == dep || strings.HasPrefix(changedPath, depPrefix) {
 						hasMatch = true
-						slog.Info("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dep)
+						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dep)
 						break
 					}
 				}
@@ -135,10 +134,8 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 	}
 
 	for _, name := range deployOrder {
-		metrics.DeploymentsTotal.WithLabelValues(name).Inc()
 		if err := r.Deploy(ctx, toDeploy[name]); err != nil {
 			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
-			metrics.DeploymentFailuresTotal.WithLabelValues(name).Inc()
 			continue
 		}
 		slog.Info("Successfully deployed the stack", "stack_name", name)
