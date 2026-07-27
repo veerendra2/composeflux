@@ -67,7 +67,7 @@ func (c *client) Pull(ctx context.Context) ([]string, error) {
 	if oldSHA != "" && oldSHA != newSHA {
 		changedFiles, err = c.GetChangedFiles(ctx, oldSHA, newSHA)
 		if err != nil {
-			slog.Warn("Failed to compute git diff file list", "old_sha", shortSHA(oldSHA), "new_sha", shortSHA(newSHA), "error", err)
+			return nil, fmt.Errorf("failed to compute git diff file list (%s..%s): %w", shortSHA(oldSHA), shortSHA(newSHA), err)
 		}
 	}
 
