@@ -72,8 +72,12 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 		}
 
 		// Check if stack needs deployment
-		if _, exists := currentStackMap[project.Name]; !exists {
+		stackInfo, exists := currentStackMap[project.Name]
+		if !exists {
 			slog.Info("New stack detected", "stack_name", project.Name)
+			toDeploy[project.Name] = project
+		} else if !stackInfo.Healthy && !stackInfo.Suspend {
+			slog.Info("Unhealthy stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 		} else if len(changedFiles) > 0 {
 			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
