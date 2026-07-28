@@ -165,7 +165,9 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 			Recreate:             api.RecreateDiverged,
 			RecreateDependencies: api.RecreateDiverged,
 			Inherit:              true,
-			Build:                &api.BuildOptions{},
+			Build: &api.BuildOptions{
+				Quiet: true,
+			},
 		},
 		Start: api.StartOptions{
 			Project: project,
