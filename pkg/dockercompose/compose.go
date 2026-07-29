@@ -256,7 +256,7 @@ func New(cfg Config) (Client, error) {
 	logrus.AddHook(hook)
 
 	dockerCLI, err := command.NewDockerCli(
-		command.WithOutputStream(&slogWriter{level: slog.LevelInfo, maxSize: 1024 * 1024, logHook: hook}), // 1MB limit
+		command.WithOutputStream(&slogWriter{level: slog.LevelDebug, maxSize: 1024 * 1024, logHook: hook}), // 1MB limit
 		command.WithErrorStream(&slogWriter{level: slog.LevelWarn, maxSize: 1024 * 1024, logHook: hook}),  // 1MB limit
 	)
 	if err != nil {
