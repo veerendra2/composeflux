@@ -162,8 +162,8 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 		Create: api.CreateOptions{
 			RemoveOrphans:        c.removeOrphans,
 			QuietPull:            true,
-			Recreate:             api.RecreateDiverged,
-			RecreateDependencies: api.RecreateDiverged,
+			Recreate:             api.RecreateForce,
+			RecreateDependencies: api.RecreateForce,
 			Inherit:              true,
 			Build: &api.BuildOptions{
 				Quiet: true,

@@ -36,7 +36,7 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 				w.buf.WriteString(line)
 			} else {
 				// Drop oversized partial line
-				slog.Warn("Dropping oversized partial log line", "size", len(line))
+				slog.Debug("Dropping oversized partial log line", "size", len(line))
 			}
 			break
 		}
