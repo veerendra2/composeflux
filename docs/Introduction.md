@@ -22,7 +22,7 @@ remote Git repository for changes and syncs again when updates are detected.
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
 4. Discovers compose stacks (one level deep in `STACK_PATH`)
 5. Builds dependency file set for each stack (compose files, include blocks, env files, mounted configs, secrets, build context)
-6. Deploys stacks that have file updates, are missing from Docker, or during initial startup sync (respects [`startup_order`](#stack-configuration))
+6. Deploys stacks that have file updates or are missing from Docker (respects [`startup_order`](#stack-configuration))
 7. Prunes stacks deleted from Git
 
 Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks

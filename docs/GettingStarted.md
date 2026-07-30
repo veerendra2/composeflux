@@ -103,7 +103,7 @@ composeflux run
 composeflux sync
 ```
 
-**Important**: After the initial startup sync (which reconciles all stacks), the `run` daemon fetches secrets and deploys changes only when Git updates are detected or when a stack is unhealthy/missing. If you update secrets in your secrets manager without making Git changes, run `composeflux sync` manually to apply updated secrets. See
+**Important**: The `run` daemon fetches secrets and deploys changes only when Git updates are detected or when a stack is unhealthy/missing. If you update secrets in your secrets manager without making Git changes, run `composeflux sync` manually to apply updated secrets. See
 [Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ## Deploy ComposeFlux

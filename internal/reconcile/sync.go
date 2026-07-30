@@ -13,8 +13,9 @@ import (
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
-// GitSync pulls changes from the Git repository and deploys stacks which are changed or new
-func (r *Reconciler) GitSync(ctx context.Context) error {
+// GitSync pulls changes from the Git repository and deploys stacks which are changed or new.
+// If force is true, all non-suspended stacks are deployed regardless of git diff.
+func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
@@ -79,8 +80,8 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 		} else if !stackInfo.Healthy && !stackInfo.Suspend {
 			slog.Info("Unhealthy stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
-		} else if r.isInitialSync && !stackInfo.Suspend {
-			slog.Info("Initial sync, deploying stack", "stack_name", project.Name)
+		} else if force && !stackInfo.Suspend {
+			slog.Info("Force sync requested, deploying stack", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 		} else if len(changedFiles) > 0 {
 			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
@@ -150,8 +151,6 @@ func (r *Reconciler) GitSync(ctx context.Context) error {
 
 	// Reset health fail counters — Git sync is the authoritative source of truth
 	clear(r.healthFailCounts)
-
-	r.isInitialSync = false
 
 	// Prune stacks which are not in the Git repository
 	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
