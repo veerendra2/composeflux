@@ -107,7 +107,7 @@ composeflux sync
 **Important**: After the initial startup sync, the `run` command fetches secrets and deploys changes only when Git
 updates are detected. If you update secrets in your secrets manager without changing anything in Git, run
 `composeflux sync` manually to apply updated secrets. See
-[Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
+[Git Diff & Dependency Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ## Deploy ComposeFlux
 

@@ -27,7 +27,7 @@ and automatically deploy your Docker stacks—all without manual intervention.
 | Feature                 | Description                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------------- |
 | GitOps Driven           | Automatic deployment from Git repository                                                          |
-| Smart Change Detection  | Hash-based detection deploys only changed stacks                                                  |
+| Smart Change Detection  | Git diff and dependency-tree change detection deploys only affected stacks       |
 | Pure Go Implementation  | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/) without shell execution |
 | Secrets Management      | Optional Bitwarden Secrets Manager and Infisical support                                          |
 | Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available                         |
