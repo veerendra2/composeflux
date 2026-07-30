@@ -81,7 +81,6 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 			slog.Info("Unhealthy stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 		} else if force && !stackInfo.Suspend {
-			slog.Info("Force sync requested, deploying stack", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 		} else if len(changedFiles) > 0 {
 			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
