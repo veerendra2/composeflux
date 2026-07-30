@@ -33,6 +33,7 @@ type Reconciler struct {
 
 	reconcileMu      sync.Mutex
 	healthFailCounts map[string]int
+	isInitialSync    bool
 }
 
 func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dockercompose.Client) (*Reconciler, error) {
@@ -50,5 +51,6 @@ func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dock
 		sClient: sClient,
 
 		healthFailCounts: make(map[string]int),
+		isInitialSync:    true,
 	}, nil
 }
