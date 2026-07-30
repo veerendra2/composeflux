@@ -158,6 +158,15 @@ func (c *client) Restart(ctx context.Context, projectName string) error {
 }
 
 func (c *client) Up(ctx context.Context, project *types.Project) error {
+	for _, svc := range project.Services {
+		if svc.Build != nil {
+			if err := c.compose.Build(ctx, project, api.BuildOptions{Quiet: true}); err != nil {
+				return err
+			}
+			break
+		}
+	}
+
 	return c.compose.Up(ctx, project, api.UpOptions{
 		Create: api.CreateOptions{
 			RemoveOrphans:        c.removeOrphans,
@@ -165,9 +174,6 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 			Recreate:             api.RecreateForce,
 			RecreateDependencies: api.RecreateForce,
 			Inherit:              true,
-			Build: &api.BuildOptions{
-				Quiet: true,
-			},
 		},
 		Start: api.StartOptions{
 			Project: project,
