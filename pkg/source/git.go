@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -78,11 +77,7 @@ func (c *client) Pull(ctx context.Context) ([]string, error) {
 	}
 
 	if err := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset}); err != nil {
-		slog.Warn("Worktree reset encountered issues, cleaning untracked files and retrying reset", "error", err)
-		_ = w.Clean(&git.CleanOptions{Dir: true})
-		if retryErr := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset}); retryErr != nil {
-			return nil, fmt.Errorf("failed to reset to %s/%s after clean: %w", remoteName, c.branch, retryErr)
-		}
+		return nil, fmt.Errorf("failed to reset to %s/%s: %w", remoteName, c.branch, err)
 	}
 
 	return changedFiles, nil
@@ -235,17 +230,7 @@ func New(cfg Config) (Client, error) {
 		}
 
 		if err := w.Checkout(opts); err != nil {
-			if errors.Is(err, git.ErrUnstagedChanges) || strings.Contains(err.Error(), "unstaged changes") {
-				slog.Warn("Worktree contains unstaged local changes, performing hard reset", "branch", cfg.Branch)
-				if resetErr := w.Reset(&git.ResetOptions{Mode: git.HardReset}); resetErr != nil {
-					slog.Warn("Failed to hard reset worktree", "error", resetErr)
-				}
-				if err = w.Checkout(opts); err != nil {
-					return nil, fmt.Errorf("failed to checkout branch %q after reset: %w", cfg.Branch, err)
-				}
-			} else {
-				return nil, fmt.Errorf("failed to checkout branch %q: %w", cfg.Branch, err)
-			}
+			return nil, fmt.Errorf("failed to checkout branch %q: %w", cfg.Branch, err)
 		}
 	}
 
