@@ -92,9 +92,8 @@ Run "composeflux <command> --help" for more information on a command.
 
 - **`run`** - Daemon mode with continuous reconciliation (default). Performs an initial sync at startup, then checks the
   Git repository for changes at configured intervals (default: 5 minutes).
-- **`sync`** - One-shot sync and deploy. Manually triggers immediate synchronization. Useful when you update secrets in
-  your secrets manager but haven't made Git changes. See
-  [Git Diff & Dependency Change Detection](Introduction.md#git-diff--dependency-change-detection).
+- **`sync`** - One-shot sync and deploy. Manually triggers immediate synchronization. See
+  [Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ```bash
 # Daemon mode (initial sync at startup, then checks Git every 5 minutes)
@@ -105,9 +104,8 @@ composeflux sync
 ```
 
 **Important**: After the initial startup sync, the `run` command fetches secrets and deploys changes only when Git
-updates are detected. If you update secrets in your secrets manager without changing anything in Git, run
-`composeflux sync` manually to apply updated secrets. See
-[Git Diff & Dependency Change Detection](Introduction.md#git-diff--dependency-change-detection).
+updates are detected or when a stack is unhealthy/missing. If you update secrets in your secrets manager, commit a change or update a file in Git to trigger a redeploy during sync. See
+[Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ## Deploy ComposeFlux
 
