@@ -80,10 +80,12 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		sep := string(filepath.Separator)
 
 		// Validate dependency paths and filter in-repository dependencies
+		defaultEnvPath := filepath.Join(project.WorkingDir, ".env")
 		var inRepoDeps []string
 		for _, dep := range deps {
-			// Log warning for any non-existent dependency path regardless of location
-			if _, err := os.Stat(dep); errors.Is(err, os.ErrNotExist) {
+			// Log warning for any non-existent dependency path regardless of location,
+			// except default .env which is tracked speculatively for deletion detection.
+			if _, err := os.Stat(dep); errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
 				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
 			}
 

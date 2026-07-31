@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -91,11 +90,8 @@ func GetDependencyPaths(project *types.Project) []string {
 		pathSet[cleaned] = struct{}{}
 	}
 
-	// Always track default .env in working directory if it exists
-	defaultEnv := filepath.Join(project.WorkingDir, ".env")
-	if _, err := os.Stat(defaultEnv); err == nil {
-		addPath(defaultEnv)
-	}
+	// Always track default .env in working directory
+	addPath(filepath.Join(project.WorkingDir, ".env"))
 
 	for _, f := range project.ComposeFiles {
 		addPath(f)
