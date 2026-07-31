@@ -3,6 +3,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -50,7 +51,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	// Validate StartupOrder directories and log warning if not exists
 	for _, stackName := range startupOrder {
 		startupItemDir := filepath.Join(repoPath, r.stackPath, stackName)
-		if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
+		if _, err := os.Stat(startupItemDir); errors.Is(err, os.ErrNotExist) {
 			slog.Warn("Stack directory in startup_order not found",
 				"startup_order_item", stackName,
 				"expected_path", startupItemDir)
@@ -78,17 +79,20 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		deps := dockercompose.GetDependencyPaths(project)
 		sep := string(filepath.Separator)
 
-		// Filter in-repository dependencies and validate them
+		// Validate dependency paths and filter in-repository dependencies
 		var inRepoDeps []string
 		for _, dep := range deps {
-			rel, err := filepath.Rel(repoPath, dep)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
-				slog.Warn("Dependency path is outside of repository", "stack_name", project.Name, "path", dep)
-				continue
-			}
-			if _, err := os.Stat(dep); os.IsNotExist(err) {
+			// Log warning for any non-existent dependency path regardless of location
+			if _, err := os.Stat(dep); errors.Is(err, os.ErrNotExist) {
 				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
 			}
+
+			// Only keep dependencies located inside the repository for Git diff matching
+			rel, err := filepath.Rel(repoPath, dep)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
+				continue
+			}
+
 			inRepoDeps = append(inRepoDeps, dep)
 		}
 
