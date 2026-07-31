@@ -24,7 +24,10 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		return err
 	}
 
-	repoPath := r.gClient.Path()
+	repoPath, err := filepath.Abs(filepath.Clean(r.gClient.Path()))
+	if err != nil {
+		return err
+	}
 
 	// Convert relative git changed files to absolute cleaned paths
 	changedPathMap := make(map[string]struct{})
@@ -46,7 +49,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 	// Validate StartupOrder directories and log warning if not exists
 	for _, stackName := range startupOrder {
-		startupItemDir := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+		startupItemDir := filepath.Join(repoPath, r.stackPath, stackName)
 		if _, err := os.Stat(startupItemDir); os.IsNotExist(err) {
 			slog.Warn("Stack directory in startup_order not found",
 				"startup_order_item", stackName,
@@ -72,6 +75,23 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 			continue
 		}
 
+		deps := dockercompose.GetDependencyPaths(project)
+		sep := string(filepath.Separator)
+
+		// Filter in-repository dependencies and validate them
+		var inRepoDeps []string
+		for _, dep := range deps {
+			rel, err := filepath.Rel(repoPath, dep)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
+				slog.Warn("Dependency path is outside of repository", "stack_name", project.Name, "path", dep)
+				continue
+			}
+			if _, err := os.Stat(dep); os.IsNotExist(err) {
+				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
+			}
+			inRepoDeps = append(inRepoDeps, dep)
+		}
+
 		// Check if stack needs deployment
 		stackInfo, exists := currentStackMap[project.Name]
 		if !exists {
@@ -84,18 +104,10 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 			toDeploy[project.Name] = project
 		} else if len(changedFiles) > 0 {
 			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
-			deps := dockercompose.GetDependencyPaths(project)
 			hasMatch := false
-			sep := string(filepath.Separator)
 
 			for changedPath := range changedPathMap {
-				for _, dep := range deps {
-					// Only consider dependency paths that are inside the git repository
-					rel, err := filepath.Rel(repoPath, dep)
-					if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
-						continue
-					}
-
+				for _, dep := range inRepoDeps {
 					depPrefix := dep
 					if !strings.HasSuffix(depPrefix, sep) {
 						depPrefix += sep
@@ -112,6 +124,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 				}
 			}
 			if hasMatch {
+				slog.Info("Changed stack detected", "stack_name", project.Name)
 				toDeploy[project.Name] = project
 			}
 		}

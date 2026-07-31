@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +26,7 @@ import (
 type Config struct {
 	RemoveOrphans bool `name:"remove-orphans" help:"Remove orphan containers" env:"REMOVE_ORPHANS" default:"true" group:"Docker Compose Options:"`
 }
+
 type Client interface {
 	LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error)
 
@@ -87,6 +89,12 @@ func GetDependencyPaths(project *types.Project) []string {
 		}
 		cleaned := filepath.Clean(p)
 		pathSet[cleaned] = struct{}{}
+	}
+
+	// Always track default .env in working directory if it exists
+	defaultEnv := filepath.Join(project.WorkingDir, ".env")
+	if _, err := os.Stat(defaultEnv); err == nil {
+		addPath(defaultEnv)
 	}
 
 	for _, f := range project.ComposeFiles {
