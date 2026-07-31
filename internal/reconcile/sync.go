@@ -83,16 +83,16 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		defaultEnvPath := filepath.Join(project.WorkingDir, ".env")
 		var inRepoDeps []string
 		for _, dep := range deps {
-			// Log warning for any non-existent dependency path regardless of location,
-			// except default .env which is tracked speculatively for deletion detection.
-			if _, err := os.Stat(dep); errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
-				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
-			}
-
-			// Only keep dependencies located inside the repository for Git diff matching
 			rel, err := filepath.Rel(repoPath, dep)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
+				// Path is outside the repository (e.g. host bind mounts /media/...).
+				// Skip os.Stat since host filesystems are not mounted inside ComposeFlux container.
 				continue
+			}
+
+			// Path is inside the Git repository clone directory — check if it exists on disk
+			if _, err := os.Stat(dep); errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
+				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
 			}
 
 			inRepoDeps = append(inRepoDeps, dep)
