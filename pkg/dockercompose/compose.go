@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/compose-spec/compose-go/v2/cli"
+	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/cli/cli/flags"
@@ -53,7 +54,10 @@ type ComposeConfig struct {
 func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error) {
 	c.logHook.setStackName(filepath.Base(composeCfg.WorkingDir))
 	defer c.logHook.setStackName("")
-	return c.compose.LoadProject(ctx, api.ProjectLoadOptions{
+
+	var extraComposeFiles []string
+
+	project, err := c.compose.LoadProject(ctx, api.ProjectLoadOptions{
 		ConfigPaths: composeCfg.ComposeFiles,
 		WorkingDir:  composeCfg.WorkingDir,
 		ProjectOptionsFns: []cli.ProjectOptionsFn{
@@ -61,8 +65,51 @@ func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*ty
 			cli.WithInterpolation(true),
 			cli.WithNormalization(true),
 			cli.WithResolvedPaths(true),
+			cli.WithLoadOptions(func(o *loader.Options) {
+				o.Listeners = append(o.Listeners, func(event string, metadata map[string]any) {
+					if event == "include" {
+						wd, _ := metadata["workingdir"].(string)
+						if wd == "" {
+							wd = composeCfg.WorkingDir
+						}
+						var fileList []string
+						switch v := metadata["path"].(type) {
+						case types.StringList:
+							fileList = v
+						case []string:
+							fileList = v
+						case string:
+							fileList = []string{v}
+						}
+						for _, p := range fileList {
+							if !filepath.IsAbs(p) {
+								p = filepath.Join(wd, p)
+							}
+							extraComposeFiles = append(extraComposeFiles, filepath.Clean(p))
+						}
+					}
+				})
+			}),
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(extraComposeFiles) > 0 {
+		seen := make(map[string]bool)
+		for _, f := range project.ComposeFiles {
+			seen[f] = true
+		}
+		for _, f := range extraComposeFiles {
+			if !seen[f] {
+				seen[f] = true
+				project.ComposeFiles = append(project.ComposeFiles, f)
+			}
+		}
+	}
+
+	return project, nil
 }
 
 func (c *client) Build(ctx context.Context, project *types.Project) error {

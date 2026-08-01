@@ -67,6 +67,9 @@ func GetDependencyPaths(project *types.Project) ProjectDependencies {
 				addFilePath(vol.Source)
 			}
 		}
+		if svc.Extends != nil && svc.Extends.File != "" {
+			addFilePath(svc.Extends.File)
+		}
 		if svc.Build != nil {
 			addBuildContext(svc.Build.Context)
 			if svc.Build.Dockerfile != "" {
