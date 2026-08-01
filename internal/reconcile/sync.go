@@ -152,7 +152,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 					if !strings.HasSuffix(dirPrefix, sep) {
 						dirPrefix += sep
 					}
-					if strings.HasPrefix(changedPath, dirPrefix) {
+					if changedPath == dirDep || strings.HasPrefix(changedPath, dirPrefix) {
 						hasMatch = true
 						slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dirDep)
 						break
