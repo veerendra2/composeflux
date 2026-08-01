@@ -35,7 +35,7 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 			if len(line) < 4096 {
 				w.buf.WriteString(line)
 			} else {
-				// Drop oversized partial line
+				// Drop oversized partial log line
 				slog.Debug("Dropping oversized partial log line", "size", len(line))
 			}
 			break
@@ -47,6 +47,11 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 			}
 			slog.Log(context.TODO(), w.level, msg, attrs...)
 		}
+	}
+
+	// Re-allocate buffer if capacity has expanded beyond 64KB to avoid holding large 1MB arrays in heap memory
+	if w.buf.Cap() > 64*1024 {
+		w.buf = bytes.Buffer{}
 	}
 
 	return len(p), nil

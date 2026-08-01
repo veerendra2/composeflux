@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -19,6 +21,12 @@ import (
 func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
+
+	// Reclaim heap memory allocations from ASTs and Git tree diffs back to the OS when GitSync exits
+	defer func() {
+		runtime.GC()
+		debug.FreeOSMemory()
+	}()
 
 	changedFiles, err := r.gClient.Pull(ctx)
 	if err != nil {
