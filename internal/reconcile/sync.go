@@ -70,7 +70,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	// Track whether build.context changed for each stack
 	buildNeededMap := make(map[string]bool)
 
-	// Check hash and determine which stacks are changed and deploy those
+	// Determine which stacks are changed and deploy those
 	for _, composeCfg := range composeCfgs {
 		project, err := r.dClient.LoadProject(ctx, composeCfg)
 		if err != nil {
@@ -147,9 +147,13 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 						// If changed file is a Dockerfile, mark buildNeeded
 						for _, svc := range project.Services {
 							if svc.Build != nil && svc.Build.Dockerfile != "" {
+								ctxDir := svc.Build.Context
+								if !filepath.IsAbs(ctxDir) {
+									ctxDir = filepath.Join(project.WorkingDir, ctxDir)
+								}
 								dfPath := svc.Build.Dockerfile
 								if !filepath.IsAbs(dfPath) {
-									dfPath = filepath.Join(svc.Build.Context, dfPath)
+									dfPath = filepath.Join(ctxDir, dfPath)
 								}
 								if filepath.Clean(dfPath) == dep {
 									buildNeeded = true

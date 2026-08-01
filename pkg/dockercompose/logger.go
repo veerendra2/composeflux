@@ -13,6 +13,7 @@ import (
 
 // slogWriter buffers and writes complete lines to slog.
 type slogWriter struct {
+	mu      sync.Mutex
 	level   slog.Level
 	buf     bytes.Buffer
 	maxSize int // Maximum buffer size in bytes
@@ -20,6 +21,8 @@ type slogWriter struct {
 }
 
 func (w *slogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	// Protect against unbounded buffer growth
 	if w.buf.Len() > w.maxSize {
 		w.buf.Reset()
@@ -50,7 +53,7 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 	}
 
 	// Re-allocate buffer if capacity has expanded beyond 64KB to avoid holding large 1MB arrays in heap memory
-	if w.buf.Cap() > 64*1024 {
+	if w.buf.Len() == 0 && w.buf.Cap() > 64*1024 {
 		w.buf = bytes.Buffer{}
 	}
 
