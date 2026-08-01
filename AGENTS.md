@@ -194,5 +194,5 @@ ctx.FatalIfErrorf(ctx.Run())
 - CGO is enabled (`CGO_ENABLED=1`) for the Bitwarden SDK (Rust FFI).
 - Multi-stage Dockerfile: `golang:1.26` builder → `gcr.io/distroless/static-debian13` final image.
 - Version info injected at link time via `-ldflags` (git tag, commit SHA, branch, build date).
-- Local dev: `task compose` runs the app via `compose-dev.yml`.
+- Local dev: `task compose` runs the app via `compose.yml`.
 

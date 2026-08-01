@@ -123,15 +123,20 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 		// Check if stack needs deployment
 		stackInfo, exists := currentStackMap[project.Name]
+		if exists && stackInfo.Suspend {
+			slog.Debug("Skipping suspended stack", "stack_name", project.Name)
+			continue
+		}
+
 		if !exists {
 			slog.Info("New stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 			buildNeededMap[project.Name] = true
-		} else if !stackInfo.Healthy && !stackInfo.Suspend {
+		} else if !stackInfo.Healthy {
 			slog.Info("Unhealthy stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
 			buildNeededMap[project.Name] = true
-		} else if force && !stackInfo.Suspend {
+		} else if force {
 			toDeploy[project.Name] = project
 			buildNeededMap[project.Name] = true
 		} else if len(changedFiles) > 0 {
