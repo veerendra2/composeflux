@@ -144,6 +144,19 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 				for _, dep := range inRepoFileDeps {
 					if changedPath == dep {
 						hasMatch = true
+						// If changed file is a Dockerfile, mark buildNeeded
+						for _, svc := range project.Services {
+							if svc.Build != nil && svc.Build.Dockerfile != "" {
+								dfPath := svc.Build.Dockerfile
+								if !filepath.IsAbs(dfPath) {
+									dfPath = filepath.Join(svc.Build.Context, dfPath)
+								}
+								if filepath.Clean(dfPath) == dep {
+									buildNeeded = true
+									break
+								}
+							}
+						}
 						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dep", dep)
 						break
 					}
@@ -219,7 +232,8 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		project := toDeploy[name]
 		if buildNeededMap[name] {
 			if err := r.dClient.Build(ctx, project); err != nil {
-				slog.Warn("Failed to build stack image", "stack_name", name, "error", err)
+				slog.Warn("Failed to build stack image, skipping deploy", "stack_name", name, "error", err)
+				continue
 			}
 		}
 
