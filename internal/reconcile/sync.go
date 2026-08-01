@@ -81,8 +81,8 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 		// Validate dependency paths and filter in-repository dependencies
 		defaultEnvPath := filepath.Join(project.WorkingDir, ".env")
-		var inRepoDeps []string
-		for _, dep := range deps {
+		var inRepoFileDeps []string
+		for _, dep := range deps.FilePaths {
 			rel, err := filepath.Rel(repoPath, dep)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
 				// Path is outside the repository (e.g. host bind mounts /media/...).
@@ -95,7 +95,21 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
 			}
 
-			inRepoDeps = append(inRepoDeps, dep)
+			inRepoFileDeps = append(inRepoFileDeps, dep)
+		}
+
+		var inRepoBuildContexts []string
+		for _, ctxDir := range deps.BuildContexts {
+			rel, err := filepath.Rel(repoPath, ctxDir)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
+				continue
+			}
+
+			if _, err := os.Stat(ctxDir); errors.Is(err, os.ErrNotExist) {
+				slog.Warn("Build context directory does not exist", "stack_name", project.Name, "path", ctxDir)
+			}
+
+			inRepoBuildContexts = append(inRepoBuildContexts, ctxDir)
 		}
 
 		// Check if stack needs deployment
@@ -113,15 +127,42 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 			hasMatch := false
 
 			for changedPath := range changedPathMap {
-				for _, dep := range inRepoDeps {
-					depPrefix := dep
-					if !strings.HasSuffix(depPrefix, sep) {
-						depPrefix += sep
+				// 1. Check exact file or path equality match for file dependencies
+				for _, dep := range inRepoFileDeps {
+					if changedPath == dep {
+						hasMatch = true
+						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dep", dep)
+						break
 					}
 
-					if changedPath == dep || strings.HasPrefix(changedPath, depPrefix) {
+					// Handle directory bind mounts in FilePaths
+					fi, err := os.Stat(dep)
+					if err == nil && fi.IsDir() {
+						depPrefix := dep
+						if !strings.HasSuffix(depPrefix, sep) {
+							depPrefix += sep
+						}
+						if strings.HasPrefix(changedPath, depPrefix) {
+							hasMatch = true
+							slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dep)
+							break
+						}
+					}
+				}
+				if hasMatch {
+					break
+				}
+
+				// 2. Check recursive match for build contexts
+				for _, ctxDir := range inRepoBuildContexts {
+					ctxPrefix := ctxDir
+					if !strings.HasSuffix(ctxPrefix, sep) {
+						ctxPrefix += sep
+					}
+
+					if changedPath == ctxDir || strings.HasPrefix(changedPath, ctxPrefix) {
 						hasMatch = true
-						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dep)
+						slog.Debug("Changed file in build context detected in stack", "stack_name", project.Name, "file", changedPath, "build_context", ctxDir)
 						break
 					}
 				}
