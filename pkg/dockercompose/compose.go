@@ -23,6 +23,7 @@ type Config struct {
 type Client interface {
 	LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error)
 
+	Build(ctx context.Context, project *types.Project) error
 	Down(ctx context.Context, projectName string) error
 	HasImageUpdates(ctx context.Context, project *types.Project) (bool, error)
 	List(ctx context.Context) ([]api.Stack, error)
@@ -64,6 +65,15 @@ func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*ty
 	})
 }
 
+func (c *client) Build(ctx context.Context, project *types.Project) error {
+	for _, svc := range project.Services {
+		if svc.Build != nil {
+			return c.compose.Build(ctx, project, api.BuildOptions{Quiet: true})
+		}
+	}
+	return nil
+}
+
 func (c *client) Down(ctx context.Context, projectName string) error {
 	return c.compose.Down(ctx, projectName, api.DownOptions{
 		RemoveOrphans: c.removeOrphans,
@@ -94,15 +104,6 @@ func (c *client) Restart(ctx context.Context, projectName string) error {
 }
 
 func (c *client) Up(ctx context.Context, project *types.Project) error {
-	for _, svc := range project.Services {
-		if svc.Build != nil {
-			if err := c.compose.Build(ctx, project, api.BuildOptions{Quiet: true}); err != nil {
-				return err
-			}
-			break
-		}
-	}
-
 	return c.compose.Up(ctx, project, api.UpOptions{
 		Create: api.CreateOptions{
 			RemoveOrphans:        c.removeOrphans,

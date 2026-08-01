@@ -67,6 +67,8 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	// Store projects to deploy
 	// Map of Stack name -> loaded Project
 	toDeploy := make(map[string]*types.Project)
+	// Track whether build.context changed for each stack
+	buildNeededMap := make(map[string]bool)
 
 	// Check hash and determine which stacks are changed and deploy those
 	for _, composeCfg := range composeCfgs {
@@ -124,14 +126,18 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		if !exists {
 			slog.Info("New stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
+			buildNeededMap[project.Name] = true
 		} else if !stackInfo.Healthy && !stackInfo.Suspend {
 			slog.Info("Unhealthy stack detected", "stack_name", project.Name)
 			toDeploy[project.Name] = project
+			buildNeededMap[project.Name] = true
 		} else if force && !stackInfo.Suspend {
 			toDeploy[project.Name] = project
+			buildNeededMap[project.Name] = true
 		} else if len(changedFiles) > 0 {
 			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
 			hasMatch := false
+			buildNeeded := false
 
 			for changedPath := range changedPathMap {
 				// 1. Check exact file or path equality match for file dependencies
@@ -142,24 +148,20 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 						break
 					}
 				}
-				if hasMatch {
-					break
-				}
 
 				// 2. Check directory bind mounts (pre-computed directory dependencies)
-				for _, dirDep := range inRepoDirDeps {
-					dirPrefix := dirDep
-					if !strings.HasSuffix(dirPrefix, sep) {
-						dirPrefix += sep
+				if !hasMatch {
+					for _, dirDep := range inRepoDirDeps {
+						dirPrefix := dirDep
+						if !strings.HasSuffix(dirPrefix, sep) {
+							dirPrefix += sep
+						}
+						if changedPath == dirDep || strings.HasPrefix(changedPath, dirPrefix) {
+							hasMatch = true
+							slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dirDep)
+							break
+						}
 					}
-					if changedPath == dirDep || strings.HasPrefix(changedPath, dirPrefix) {
-						hasMatch = true
-						slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dirDep)
-						break
-					}
-				}
-				if hasMatch {
-					break
 				}
 
 				// 3. Check recursive match for build contexts
@@ -171,17 +173,21 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 					if changedPath == ctxDir || strings.HasPrefix(changedPath, ctxPrefix) {
 						hasMatch = true
+						buildNeeded = true
 						slog.Debug("Changed file in build context detected in stack", "stack_name", project.Name, "file", changedPath, "build_context", ctxDir)
 						break
 					}
 				}
-				if hasMatch {
+
+				if hasMatch && buildNeeded {
 					break
 				}
 			}
+
 			if hasMatch {
 				slog.Info("Changed stack detected", "stack_name", project.Name)
 				toDeploy[project.Name] = project
+				buildNeededMap[project.Name] = buildNeeded
 			}
 		}
 	}
@@ -210,7 +216,14 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	}
 
 	for _, name := range deployOrder {
-		if err := r.Deploy(ctx, toDeploy[name]); err != nil {
+		project := toDeploy[name]
+		if buildNeededMap[name] {
+			if err := r.dClient.Build(ctx, project); err != nil {
+				slog.Warn("Failed to build stack image", "stack_name", name, "error", err)
+			}
+		}
+
+		if err := r.Deploy(ctx, project); err != nil {
 			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
 			continue
 		}
