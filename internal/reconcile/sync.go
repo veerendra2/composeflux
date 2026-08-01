@@ -82,6 +82,8 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		// Validate dependency paths and filter in-repository dependencies
 		defaultEnvPath := filepath.Join(project.WorkingDir, ".env")
 		var inRepoFileDeps []string
+		var inRepoDirDeps []string
+
 		for _, dep := range deps.FilePaths {
 			rel, err := filepath.Rel(repoPath, dep)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
@@ -91,11 +93,16 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 			}
 
 			// Path is inside the Git repository clone directory — check if it exists on disk
-			if _, err := os.Stat(dep); errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
+			fi, err := os.Stat(dep)
+			if errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
 				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
 			}
 
-			inRepoFileDeps = append(inRepoFileDeps, dep)
+			if err == nil && fi.IsDir() {
+				inRepoDirDeps = append(inRepoDirDeps, dep)
+			} else {
+				inRepoFileDeps = append(inRepoFileDeps, dep)
+			}
 		}
 
 		var inRepoBuildContexts []string
@@ -134,26 +141,28 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dep", dep)
 						break
 					}
+				}
+				if hasMatch {
+					break
+				}
 
-					// Handle directory bind mounts in FilePaths
-					fi, err := os.Stat(dep)
-					if err == nil && fi.IsDir() {
-						depPrefix := dep
-						if !strings.HasSuffix(depPrefix, sep) {
-							depPrefix += sep
-						}
-						if strings.HasPrefix(changedPath, depPrefix) {
-							hasMatch = true
-							slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dep)
-							break
-						}
+				// 2. Check directory bind mounts (pre-computed directory dependencies)
+				for _, dirDep := range inRepoDirDeps {
+					dirPrefix := dirDep
+					if !strings.HasSuffix(dirPrefix, sep) {
+						dirPrefix += sep
+					}
+					if strings.HasPrefix(changedPath, dirPrefix) {
+						hasMatch = true
+						slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dirDep)
+						break
 					}
 				}
 				if hasMatch {
 					break
 				}
 
-				// 2. Check recursive match for build contexts
+				// 3. Check recursive match for build contexts
 				for _, ctxDir := range inRepoBuildContexts {
 					ctxPrefix := ctxDir
 					if !strings.HasSuffix(ctxPrefix, sep) {
