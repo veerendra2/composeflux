@@ -41,16 +41,18 @@ type client struct {
 
 // Pull syncs latest changes from remote and returns a list of changed relative file paths since previous HEAD.
 func (c *client) Pull(ctx context.Context) ([]string, error) {
-	// Capture the last-known remote tip BEFORE fetching so the diff covers
-	// exactly what the remote pushed, regardless of local HEAD state (e.g.
-	// manual checkout, crash recovery that left HEAD on an unrelated commit).
-	prevRemoteRef, _ := c.repo.Reference(plumbing.NewRemoteReferenceName(remoteName, c.branch), true)
+	// Capture local HEAD before fetch to compute the diff. In daemon mode,
+	// HasUpdates() advances the remote ref but leaves local HEAD at the old
+	// commit, so this correctly diffs old..new. If local HEAD diverged
+	// (manual checkout, crash), the diff may be misleading but the hard
+	// reset below corrects the state.
+	localRef, err := c.repo.Head()
 	oldSHA := ""
-	if prevRemoteRef != nil {
-		oldSHA = prevRemoteRef.Hash().String()
+	if err == nil {
+		oldSHA = localRef.Hash().String()
 	}
 
-	err := c.repo.FetchContext(ctx, &git.FetchOptions{
+	err = c.repo.FetchContext(ctx, &git.FetchOptions{
 		RemoteName: remoteName,
 		Auth:       c.sshAuth,
 		Force:      true, // required for force-pushed branches to update remote tracking refs

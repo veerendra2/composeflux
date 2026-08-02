@@ -33,3 +33,5 @@ go.work.sum
 .direnv
 *playground*
 dist/.claude/
+
+.claude
