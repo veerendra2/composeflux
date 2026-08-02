@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
@@ -96,11 +95,17 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 			// Path is inside the Git repository clone directory — check if it exists on disk
 			fi, err := os.Stat(dep)
-			if errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
-				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
+					slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
+				}
+				// Skip paths we cannot stat (ErrNotExist or permission error) — we
+				// cannot determine whether they are files or directories, so including
+				// them in the wrong bucket would produce incorrect change detection.
+				continue
 			}
 
-			if err == nil && fi.IsDir() {
+			if fi.IsDir() {
 				inRepoDirDeps = append(inRepoDirDeps, dep)
 			} else {
 				inRepoFileDeps = append(inRepoFileDeps, dep)
@@ -119,6 +124,26 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 			}
 
 			inRepoBuildContexts = append(inRepoBuildContexts, ctxDir)
+		}
+
+		// Pre-compute Dockerfile paths for buildNeeded detection
+		dockerfilePaths := make(map[string]bool)
+		for _, svc := range project.Services {
+			if svc.Build != nil {
+				ctxDir := svc.Build.Context
+				if !filepath.IsAbs(ctxDir) {
+					ctxDir = filepath.Join(project.WorkingDir, ctxDir)
+				}
+
+				dfPath := svc.Build.Dockerfile
+				if dfPath == "" {
+					dfPath = "Dockerfile"
+				}
+				if !filepath.IsAbs(dfPath) {
+					dfPath = filepath.Join(ctxDir, dfPath)
+				}
+				dockerfilePaths[filepath.Clean(dfPath)] = true
+			}
 		}
 
 		// Check if stack needs deployment
@@ -149,22 +174,8 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 				for _, dep := range inRepoFileDeps {
 					if changedPath == dep {
 						hasMatch = true
-						// If changed file is a Dockerfile, mark buildNeeded
-						for _, svc := range project.Services {
-							if svc.Build != nil && svc.Build.Dockerfile != "" {
-								ctxDir := svc.Build.Context
-								if !filepath.IsAbs(ctxDir) {
-									ctxDir = filepath.Join(project.WorkingDir, ctxDir)
-								}
-								dfPath := svc.Build.Dockerfile
-								if !filepath.IsAbs(dfPath) {
-									dfPath = filepath.Join(ctxDir, dfPath)
-								}
-								if filepath.Clean(dfPath) == dep {
-									buildNeeded = true
-									break
-								}
-							}
+						if dockerfilePaths[dep] {
+							buildNeeded = true
 						}
 						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dep", dep)
 						break
@@ -226,9 +237,13 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	}
 
 	// Add remaining stacks (not in StartupOrder)
+	inOrder := make(map[string]bool, len(deployOrder))
+	for _, name := range deployOrder {
+		inOrder[name] = true
+	}
+
 	for stackName := range toDeploy {
-		// Only add if not already in deployOrder
-		if !slices.Contains(deployOrder, stackName) {
+		if !inOrder[stackName] {
 			deployOrder = append(deployOrder, stackName)
 		}
 	}
