@@ -8,9 +8,6 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
-      - "Dockerfile"
-      - ".github/workflows/ci.yml"
-      - ".github/workflows/docker-build-push.yml"
 
 jobs:
   golangci-lint:
