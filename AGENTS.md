@@ -2,25 +2,23 @@
 
 ## Project Overview
 
-ComposeFlux is a Go application that implements a GitOps reconciliation loop for Docker Compose stacks. It polls a Git repository, detects changes via SHA256 checksums stored as container labels, and deploys/prunes stacks using the native Docker Compose SDK.
+ComposeFlux is a Go application that implements a GitOps reconciliation loop for Docker Compose stacks. It polls a Git repository, detects changes via Git diff and Compose project dependency trees, and deploys/prunes stacks using the native Docker Compose SDK.
 
 **Module**: `github.com/veerendra2/composeflux`  
-**Go version**: 1.26.2 (CGO enabled — Bitwarden SDK uses cgo FFI into Rust)
+**Go version**: 1.26 (CGO enabled — Bitwarden SDK uses cgo FFI into Rust)
 
 ---
 
 ## Repository Layout
 
 ```
-cmd/composeflux/        # Main binary entry point (CLI setup via kong)
-cmd/prune-playground/   # Dev scratch binary
-internal/metrics/       # Prometheus metric definitions (promauto counters)
-internal/reconcile/     # Core reconciliation logic (private to module)
-pkg/dockercompose/      # Docker Compose SDK wrapper (exported)
+cmd/composeflux/        # CLI subcommands (run, sync) setup via kong
+cmd/playground/         # Dev scratch area
+internal/reconcile/     # Core reconciliation loop, Git sync, health checks, prune logic
+pkg/dockercompose/      # Docker & Compose SDK wrapper
 pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical) — optional
-pkg/source/             # Git client (go-git)
+pkg/source/             # Git client (go-git wrapper)
 docs/                   # MkDocs documentation
-docs/dashboards/        # Grafana dashboard JSON and screenshot
 ```
 
 ---
@@ -59,12 +57,22 @@ go test -race ./...
 
 ---
 
-## Code Style Guidelines
+## Coding Instructions & Guidelines
+
+### Implementation Principles
+
+- **Surgical & Simple**: Keep diffs minimal, concise, readable, and production-ready. Avoid unneeded abstractions, interfaces with single implementations, or premature options/scaffolding.
+- **Preserve Functionality**: Never break existing behavior or CLI contracts. Ensure changes do not introduce regressions.
+- **Verify Edge Cases & Docs**: Always cross-check edge cases against official library/platform documentation (e.g., `go-git`, `docker/compose`, `filepath.Rel` traversal behavior, OS path separators).
+- **Bug & Leak Prevention**:
+  - Always clean up resources (`defer cancel()`, `defer file.Close()`, `defer ticker.Stop()`).
+  - Watch for goroutine leaks, unbounded memory allocation, and unhandled errors in loop select cases.
+  - Guard nil references, map lookups, and pointer dereferences.
 
 ### Formatting
 
-- Format with `go fmt ./...` before committing. No `.golangci.yml` — linter defaults apply.
-- Follow idiomatic Go line lengths; no hard limit enforced.
+- Format with `go fmt ./...` before committing.
+- Run `go vet ./...` and `task lint` on modified code.
 
 ### Import Organization
 
@@ -95,11 +103,11 @@ import (
 | Element | Convention | Example |
 |---|---|---|
 | Variables, fields | `camelCase` | `stackPath`, `gitInterval` |
-| Exported functions/methods | `PascalCase` | `New()`, `Deploy()`, `Sync()` |
-| Unexported functions | `camelCase` | `projectChecksum()`, `discoverComposeStack()` |
+| Exported functions/methods | `PascalCase` | `New()`, `Deploy()`, `GitSync()` |
+| Unexported functions | `camelCase` | `discoverComposeStack()`, `isManagedStack()` |
 | Structs / Types | `PascalCase` | `Reconciler`, `StackConfig` |
 | Interfaces | `PascalCase` | `Client` |
-| Exported constants | `PascalCase` | `LabelManaged`, `LabelStackHash` |
+| Exported constants | `PascalCase` | `LabelManaged`, `LabelDeployedAt` |
 | Unexported constants | `camelCase` | `appName` |
 | Source files | `snake_case.go` | `deploy.go`, `config.go`, `bitwarden.go` |
 | Receiver names | Short (1–2 letters) | `r` for `*Reconciler`, `c` for `*client` |
@@ -166,23 +174,13 @@ ctx.FatalIfErrorf(ctx.Run())
 
 ### Concurrency
 
-- `reconcileMu sync.Mutex` serializes `Sync` and `SyncImages` to prevent concurrent execution and partial deployments — lock it as the first action in both methods.
+- `reconcileMu sync.Mutex` serializes `GitSync` and `UpdateImages` to prevent concurrent execution and partial deployments — lock it as the first action in both methods.
 - `sync.Mutex` / `sync.RWMutex` zero values are ready to use; do not initialise them explicitly in `New()`.
 
 ### Constructor Pattern
 
 - Every package exposes `New(...)` returning `(Interface, error)` or `(*Type, error)`.
 - Constructors perform all initialisation: auth, connection setup, validation.
-
----
-
-## Observability
-
-- Prometheus metrics defined in `internal/metrics/metrics.go` using `promauto.NewCounterVec`.
-- All counters use `stack_name` as the sole label to avoid high cardinality.
-- Metrics are incremented in reconciler paths (`Sync`, `SyncImages`, `Prune`) — never in the Docker Compose client layer.
-- The `/metrics` HTTP endpoint is served from `cmd/composeflux/run.go` (daemon mode only).
-- Grafana dashboard JSON lives in `docs/dashboards/` with a `${DS_PROMETHEUS}` variable datasource for portability.
 
 ---
 
@@ -194,6 +192,7 @@ ctx.FatalIfErrorf(ctx.Run())
 ## Docker / Build Notes
 
 - CGO is enabled (`CGO_ENABLED=1`) for the Bitwarden SDK (Rust FFI).
-- Multi-stage Dockerfile: `golang:1.26.2` builder → `gcr.io/distroless/static-debian13` final image.
+- Multi-stage Dockerfile: `golang:1.26` builder → `gcr.io/distroless/static-debian13` final image.
 - Version info injected at link time via `-ldflags` (git tag, commit SHA, branch, build date).
-- Local dev: `task compose` runs the app via `compose-dev.yml`.
+- Local dev: `task compose` runs the app via `compose.yml`.
+

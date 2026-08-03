@@ -62,7 +62,6 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
 | `REMOVE_ORPHANS`            | Remove orphan containers during deploy                                                                                        | `true`                     |
 | `PRUNE_INTERVAL`            | Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all managed stacks are healthy. Set to `0` to disable. | `24h`       |
-| `METRICS_ADDR`              | Prometheus metrics listen address. Empty to disable.                                                                          | `:9090`                    |
 
 !!! warning
 
@@ -93,9 +92,8 @@ Run "composeflux <command> --help" for more information on a command.
 
 - **`run`** - Daemon mode with continuous reconciliation (default). Performs an initial sync at startup, then checks the
   Git repository for changes at configured intervals (default: 5 minutes).
-- **`sync`** - One-shot sync and deploy. Manually triggers immediate synchronization. Useful when you update secrets in
-  your secrets manager but haven't made Git changes. See
-  [Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
+- **`sync`** - One-shot sync and deploy. Performs an immediate sync and force-reconciles all managed stacks. Useful when you update secrets in your secrets manager without making Git changes. See
+  [Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ```bash
 # Daemon mode (initial sync at startup, then checks Git every 5 minutes)
@@ -105,10 +103,8 @@ composeflux run
 composeflux sync
 ```
 
-**Important**: After the initial startup sync, the `run` command fetches secrets and deploys changes only when Git
-updates are detected. If you update secrets in your secrets manager without changing anything in Git, run
-`composeflux sync` manually to apply updated secrets. See
-[Hash-Based Change Detection](Introduction.md#hash-based-change-detection).
+**Important**: The `run` daemon fetches secrets and deploys changes only when Git updates are detected or when a stack is unhealthy/missing. If you update secrets in your secrets manager without making Git changes, run `composeflux sync` manually to apply updated secrets. See
+[Change Detection](Introduction.md#git-diff--dependency-change-detection).
 
 ## Deploy ComposeFlux
 
@@ -185,12 +181,6 @@ services:
       # Logging
       # LOG_LEVEL: info
       # LOG_FORMAT: console           # console or json
-
-      # Metrics
-      # METRICS_ADDR: ":9090"         # Prometheus metrics endpoint, empty to disable
-
-    ports:
-      - "9090:9090" # Prometheus metrics
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

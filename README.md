@@ -1,6 +1,6 @@
 # ComposeFlux
 
-> :warning: _Currently in beta_
+> ⚠️ **Currently in beta** — Expect heavy refactoring and breaking changes as the project evolves toward v1.0. See [open v1.x.x issues](https://github.com/veerendra2/composeflux/issues?q=is%3Aissue%20state%3Aopen%20label%3Av1.x.x) for tracking progress toward the first stable release.
 
 _A GitOps continuous deployment tool for Docker Compose_
 
@@ -27,12 +27,11 @@ and automatically deploy your Docker stacks—all without manual intervention.
 | Feature                 | Description                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------------- |
 | GitOps Driven           | Automatic deployment from Git repository                                                          |
-| Smart Change Detection  | Hash-based detection deploys only changed stacks                                                  |
+| Change Detection        | Git diff & dependency-tree detection deploys only affected stacks                 |
 | Pure Go Implementation  | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/) without shell execution |
 | Secrets Management      | Optional Bitwarden Secrets Manager and Infisical support                                          |
 | Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available                         |
 | Flexible Configuration  | Startup order and shared environment variables                                                    |
-| Prometheus Metrics      | Built-in metrics endpoint for deployment, image update, and prune observability                   |
 | Simple & Headless       | No UI, no backend database                                                                        |
 
 **[Full Documentation](https://veerendra2.github.io/composeflux/)** — Getting started, configuration, guides, and more.

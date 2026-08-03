@@ -32,4 +32,6 @@ go.work.sum
 # .vscode/
 .direnv
 *playground*
-dist
+dist/.claude/
+
+.claude

@@ -11,7 +11,7 @@ import (
 
 func (r *Reconciler) Run(ctx context.Context) {
 	// Sync from Git during bootstrap
-	if err := r.GitSync(ctx); err != nil {
+	if err := r.GitSync(ctx, false); err != nil {
 		slog.Error("Failed initial sync", "error", err)
 		return
 	}
@@ -76,7 +76,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 					return
 				}
 				if ok {
-					if err := r.GitSync(checkCtx); err != nil {
+					if err := r.GitSync(checkCtx, false); err != nil {
 						slog.Error("Failed to sync from git", "error", err)
 					}
 				}
