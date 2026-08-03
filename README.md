@@ -1,6 +1,6 @@
 # ComposeFlux
 
-> :warning: _Currently in beta_
+> ⚠️ **Currently in beta** — Expect heavy refactoring and breaking changes as the project evolves toward v1.0. See [open v1.x.x issues](https://github.com/veerendra2/composeflux/issues?q=is%3Aissue%20state%3Aopen%20label%3Av1.x.x) for tracking progress toward the first stable release.
 
 _A GitOps continuous deployment tool for Docker Compose_
 

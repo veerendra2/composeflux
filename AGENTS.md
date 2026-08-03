@@ -104,10 +104,10 @@ import (
 |---|---|---|
 | Variables, fields | `camelCase` | `stackPath`, `gitInterval` |
 | Exported functions/methods | `PascalCase` | `New()`, `Deploy()`, `GitSync()` |
-| Unexported functions | `camelCase` | `projectChecksum()`, `discoverComposeStack()` |
+| Unexported functions | `camelCase` | `discoverComposeStack()`, `isManagedStack()` |
 | Structs / Types | `PascalCase` | `Reconciler`, `StackConfig` |
 | Interfaces | `PascalCase` | `Client` |
-| Exported constants | `PascalCase` | `LabelManaged`, `LabelStackHash` |
+| Exported constants | `PascalCase` | `LabelManaged`, `LabelDeployedAt` |
 | Unexported constants | `camelCase` | `appName` |
 | Source files | `snake_case.go` | `deploy.go`, `config.go`, `bitwarden.go` |
 | Receiver names | Short (1–2 letters) | `r` for `*Reconciler`, `c` for `*client` |
