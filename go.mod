@@ -3,19 +3,19 @@ module github.com/veerendra2/composeflux
 go 1.26
 
 require (
-	github.com/docker/cli v29.6.2+incompatible
+	github.com/docker/cli v29.7.0+incompatible
 	github.com/docker/compose/v5 v5.3.1
 )
 
 require (
 	github.com/alecthomas/kong v1.16.0
 	github.com/bitwarden/sdk-go/v2 v2.1.0
-	github.com/compose-spec/compose-go/v2 v2.13.0
+	github.com/compose-spec/compose-go/v2 v2.14.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/go-git/go-git/v5 v5.19.1
+	github.com/go-git/go-git/v5 v5.19.2
 	github.com/infisical/go-sdk v0.8.0
-	github.com/moby/moby/client v0.5.0
+	github.com/moby/moby/client v0.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/veerendra2/gopackages v1.2.3
@@ -182,7 +182,7 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.282.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
