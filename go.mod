@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/alecthomas/kong v1.16.0
+	github.com/alecthomas/kong v1.16.1
 	github.com/bitwarden/sdk-go/v2 v2.1.0
 	github.com/compose-spec/compose-go/v2 v2.14.0
 	github.com/distribution/reference v0.6.0
@@ -17,7 +17,7 @@ require (
 	github.com/infisical/go-sdk v0.8.0
 	github.com/moby/moby/client v0.5.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.0
 	github.com/veerendra2/gopackages v1.2.3
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 )
