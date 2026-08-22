@@ -88,7 +88,7 @@ tasks:
     deps:
       - vet
     cmd: |
-      go build -ldflags "{{.LINUX_LDFLAGS}} \
+      go build -ldflags "-s -w {{.LINUX_LDFLAGS}} \
         -X github.com/veerendra2/gopackages/version.Version={{.VERSION}} \
         -X github.com/veerendra2/gopackages/version.Revision={{.REVISION}} \
         -X github.com/veerendra2/gopackages/version.Branch={{.BRANCH}} \

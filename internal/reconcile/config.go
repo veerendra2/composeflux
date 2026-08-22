@@ -28,8 +28,8 @@ func Load(path string) (*StackConfig, error) {
 	return &cfg, nil
 }
 
-// loadEnvAndConfig loads secrets and environment variables from stack.yml statelessly.
-func (r *Reconciler) loadEnvAndConfig() ([]string, []string, error) {
+// loadStackConfig loads stack.yml for startup_order and global environment variables statelessly.
+func (r *Reconciler) loadStackConfig() ([]string, []string, error) {
 	var envs []string
 	var startupOrder []string
 
@@ -42,17 +42,6 @@ func (r *Reconciler) loadEnvAndConfig() ([]string, []string, error) {
 			envs = append(envs, fmt.Sprintf("%s=%s", key, value))
 		}
 		startupOrder = cfg.StartupOrder
-	}
-
-	if r.sClient != nil {
-		secrets, err := r.sClient.FetchAll()
-		if err != nil {
-			return envs, startupOrder, err
-		}
-
-		for _, secret := range secrets {
-			envs = append(envs, fmt.Sprintf("%s=%s", secret.Key, secret.Value))
-		}
 	}
 
 	return envs, startupOrder, nil

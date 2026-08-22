@@ -13,12 +13,12 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	envs, _, err := r.loadEnvAndConfig()
+	globalEnvs, _, err := r.loadStackConfig()
 	if err != nil {
 		return err
 	}
 
-	srcStacks, err := r.discoverComposeStack(envs)
+	srcStacks, err := r.discoverComposeStack(globalEnvs)
 	if err != nil {
 		return err
 	}

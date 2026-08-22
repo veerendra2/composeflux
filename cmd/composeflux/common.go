@@ -11,17 +11,19 @@ import (
 	"time"
 
 	"github.com/veerendra2/composeflux/internal/reconcile"
+	"github.com/veerendra2/composeflux/pkg/agesecrets"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
-	"github.com/veerendra2/composeflux/pkg/secrets"
+	"github.com/veerendra2/composeflux/pkg/secretsmanager"
 	"github.com/veerendra2/composeflux/pkg/source"
 	"github.com/veerendra2/gopackages/version"
 )
 
 type CommonConfig struct {
-	Secrets       secrets.Config       `embed:""`
-	Reconciler    reconcile.Config     `embed:"" group:"Reconciler Options:"`
-	Source        source.Config        `embed:"" group:"Git Source Options:"`
-	DockerCompose dockercompose.Config `embed:"" group:"Docker Compose Options:"`
+	Secrets       secretsmanager.Config `embed:""`
+	Age           agesecrets.Config     `embed:""`
+	Reconciler    reconcile.Config      `embed:"" group:"Reconciler Options:"`
+	Source        source.Config         `embed:"" group:"Git Source Options:"`
+	DockerCompose dockercompose.Config  `embed:"" group:"Docker Compose Options:"`
 }
 
 // Validate checks provider-specific configuration
@@ -48,7 +50,11 @@ func (c *CommonConfig) Validate() error {
 
 // InitClients initializes all required clients (secrets, git, docker, reconciler)
 func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, func(), error) {
-	sClient, err := secrets.New(ctx, c.Secrets)
+	if c.Secrets.Provider != "" {
+		slog.Warn("External secrets manager integration is deprecated and will be removed in a future release. Migrate to age-encrypted secret files (*.age).", "provider", c.Secrets.Provider)
+	}
+
+	sClient, err := secretsmanager.New(ctx, c.Secrets)
 	if err != nil {
 		slog.Error("Failed to create secrets manager client", "provider", c.Secrets.Provider, "error", err)
 		return nil, nil, err
@@ -119,8 +125,11 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 	slog.Info("Docker version", dockerVersion...)
 
+	// Create age client
+	ageClient := agesecrets.New(c.Age.Passphrase)
+
 	// Create reconciler
-	rClient, err := reconcile.New(c.Reconciler, sClient, gClient, dClient)
+	rClient, err := reconcile.New(c.Reconciler, ageClient, sClient, gClient, dClient)
 	if err != nil {
 		slog.Error("Failed to create reconciler client", "error", err)
 		return nil, cleanup, err

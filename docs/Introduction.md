@@ -8,7 +8,7 @@ automatically deploys stacks when changes are detected.
 - Manage a few Docker Compose stacks on home servers
 - No complex orchestration, clustering, or remote agents
 - Local operation only - each server runs its own instance
-- Just Git + Docker Compose + Secrets Manager
+- Just Git + Docker Compose + Age Encrypted Secrets (or Secrets Manager)
 
 ## How Sync Works
 
@@ -18,10 +18,10 @@ ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an 
 remote Git repository for changes and syncs again when updates are detected.
 
 1. Pulls latest commits and tracks changed file paths
-2. Fetches secrets from secrets manager
+2. Loads shared secrets (external secrets manager and root `*.age` files)
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
 4. Discovers compose stacks (one level deep in `STACK_PATH`)
-5. Builds dependency file set for each stack (compose files, include blocks, env files, mounted configs, secrets, build context)
+5. Builds dependency file set for each stack (compose files, include blocks, env files, mounted configs, secrets, build context, stack `*.age` files)
 6. Deploys stacks that have file updates or are missing from Docker (respects [`startup_order`](#stack-configuration))
 7. Prunes stacks deleted from Git
 
@@ -43,6 +43,7 @@ ComposeFlux uses a Git diff and dependency-tree-based approach to decide whether
 - **Dependency Tree Resolution**: Each stack's Compose project resolves all related file dependencies, including:
   - Compose files and `include` directives
   - Environment files (`env_file`)
+  - Age-encrypted secrets (`*.age` files in stack or included directories)
   - Mounted configuration files (`configs`) and secrets (`secrets`)
   - Host bind mounts (`volumes`)
   - Local build context and Dockerfiles (`build`)

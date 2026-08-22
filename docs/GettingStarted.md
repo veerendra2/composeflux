@@ -6,7 +6,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 - Docker with Compose v2+
 - Git repository with Compose stacks
-- Secrets manager: **Bitwarden** or **Infisical** (optional, for secrets injection and deploy key fetching)
+- Secrets management: **Age encrypted files** (`*.age`) or external secrets manager (**Bitwarden** / **Infisical**, deprecated)
 - SSH key for Git access (store in secrets manager or mount as volume)
 
 ## Environment Variables
@@ -18,11 +18,23 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `GIT_REPO_URL` | Git repository SSH URL (e.g., `git@github.com:user/repo.git`) |
 | `STACK_PATH`   | Path to stacks directory in repo (relative to repo root)      |
 
-### Optional - Secrets Provider
+### Optional - Age Encrypted Secrets (Recommended)
 
-| Variable           | Description                                            |
-| ------------------ | ------------------------------------------------------ |
-| `SECRETS_PROVIDER` | Secrets manager: `bitwarden` or `infisical` (optional) |
+| Variable         | Description                                                          | Default |
+| ---------------- | -------------------------------------------------------------------- | ------- |
+| `AGE_PASSPHRASE` | Passphrase used to decrypt `*.age` secret files in Git repositories | `""`    |
+
+See the [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md) for full details on encrypting and layering secrets.
+
+### Optional - Secrets Provider (Deprecated)
+
+!!! warning "Deprecated"
+
+    External secrets manager providers (`bitwarden`, `infisical`) are deprecated and will be removed in a future release. Migrate to [Age Encrypted Secrets](how-to-guides/AgeSecrets.md).
+
+| Variable           | Description                                                        |
+| ------------------ | ------------------------------------------------------------------ |
+| `SECRETS_PROVIDER` | Secrets manager: `bitwarden` or `infisical` (optional, deprecated) |
 
 **Bitwarden (when `SECRETS_PROVIDER=bitwarden`):**
 
@@ -108,10 +120,11 @@ composeflux sync
 
 ## Deploy ComposeFlux
 
-**1. Set up Secrets Manager:**
+**1. Set up Secrets:**
 
-- [Bitwarden Setup Guide](how-to-guides/Bitwarden.md)
-- [Infisical Setup Guide](how-to-guides/Infisical.md)
+- [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md) (Recommended)
+- [Bitwarden Setup Guide](how-to-guides/Bitwarden.md) (Deprecated)
+- [Infisical Setup Guide](how-to-guides/Infisical.md) (Deprecated)
 
 **2. Configure Git Access:**
 
@@ -124,14 +137,16 @@ composeflux sync
 GIT_REPO_URL=git@github.com:user/stacks-repo.git
 STACK_PATH=stacks
 
-# Optional - Choose a secrets provider (omit to run without secrets):
+# Recommended: Age Encrypted Secrets Passphrase
+AGE_PASSPHRASE=your-secure-passphrase
 
+# Optional / Deprecated: External Secrets Provider (omit if using Age secrets or running without secrets)
 # Option A: Bitwarden
-SECRETS_PROVIDER=bitwarden
-GIT_DEPLOY_KEY_SECRET_REF=aaaaaaa-bbbbb-bbbb-cccc-ddddd
-BITWARDEN_ACCESS_TOKEN=your-access-token
-BITWARDEN_ORGANIZATION_ID=your-org-id
-BITWARDEN_PROJECT_ID=your-project-id
+# SECRETS_PROVIDER=bitwarden
+# GIT_DEPLOY_KEY_SECRET_REF=aaaaaaa-bbbbb-bbbb-cccc-ddddd
+# BITWARDEN_ACCESS_TOKEN=your-access-token
+# BITWARDEN_ORGANIZATION_ID=your-org-id
+# BITWARDEN_PROJECT_ID=your-project-id
 
 # Option B: Infisical
 # SECRETS_PROVIDER=infisical
@@ -158,14 +173,17 @@ services:
       # GIT_INTERVAL: 5m              # Sync interval
       # GIT_BRANCH: main
 
-      # Secrets Manager - Bitwarden (optional)
+      # Age Encrypted Secrets (Recommended)
+      AGE_PASSPHRASE: ${AGE_PASSPHRASE}
+
+      # Secrets Manager - Bitwarden (deprecated, comment out if using Age secrets)
       # SECRETS_PROVIDER: ${SECRETS_PROVIDER}
       # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
       # BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
       # BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
       # BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
 
-      # Secrets Manager - Infisical (comment out Bitwarden above if using this)
+      # Secrets Manager - Infisical (deprecated, comment out if using Age secrets)
       # SECRETS_PROVIDER: infisical
       # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
       # INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID}

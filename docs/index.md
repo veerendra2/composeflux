@@ -27,7 +27,8 @@ and automatically deploy your Docker stacks—all without manual intervention.
 | GitOps Driven | Automatic deployment from Git repository |
 | Change Detection | Git diff & dependency-tree detection deploys only affected stacks |
 | Pure Go Implementation | Native Docker Compose SDK without shell execution |
-| Secrets Management | Optional Bitwarden Secrets Manager and Infisical support |
+| Offline Secrets (Age) | Encrypted `*.age` secret files in Git repos decrypted in-memory via passphrase |
+| External Secrets Providers (Deprecated) | Optional Bitwarden Secrets Manager and Infisical support (deprecated) |
 | Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available |
 | Flexible Configuration | Startup order and shared environment variables |
 | Simple & Headless | No UI, no backend database |

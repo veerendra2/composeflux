@@ -36,13 +36,13 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		changedPathMap[absPath] = struct{}{}
 	}
 
-	envs, startupOrder, err := r.loadEnvAndConfig()
+	globalEnvs, startupOrder, err := r.loadStackConfig()
 	if err != nil {
 		return err
 	}
 
 	// Discover compose stacks
-	composeCfgs, err := r.discoverComposeStack(envs)
+	composeCfgs, err := r.discoverComposeStack(globalEnvs)
 	if err != nil {
 		return err
 	}
@@ -63,6 +63,12 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		return err
 	}
 
+	// Load shared secrets (external secrets manager + root *.age files)
+	sharedAgeEnvs, sharedAgeFiles, err := r.loadSharedSecrets()
+	if err != nil {
+		slog.Warn("Failed to load shared secrets", "error", err)
+	}
+
 	// Store projects to deploy
 	// Map of Stack name -> loaded Project
 	toDeploy := make(map[string]*types.Project)
@@ -71,13 +77,16 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 	// Determine which stacks are changed and deploy those
 	for _, composeCfg := range composeCfgs {
-		project, err := r.dClient.LoadProject(ctx, composeCfg)
+		project, allStackAgeFiles, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedAgeEnvs)
 		if err != nil {
-			slog.Warn("Skipping, failed to load project", "path", composeCfg.WorkingDir, "error", err)
+			slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
 		deps := dockercompose.GetDependencyPaths(project)
+		// Add discovered *.age files (stack-specific, included dirs, and shared) to change tracking dependencies
+		deps.FilePaths = append(deps.FilePaths, allStackAgeFiles...)
+		deps.FilePaths = append(deps.FilePaths, sharedAgeFiles...)
 		sep := string(filepath.Separator)
 
 		// Validate dependency paths and filter in-repository dependencies

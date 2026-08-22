@@ -1,4 +1,4 @@
-package secrets
+package secretsmanager
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	Provider string `name:"secrets-provider" enum:",bitwarden,infisical" env:"SECRETS_PROVIDER" default:"" help:"Secrets manager provider to use (bitwarden or infisical)"`
+	Provider string `name:"secrets-provider" enum:",bitwarden,infisical" env:"SECRETS_PROVIDER" default:"" help:"Secrets manager provider to use (bitwarden or infisical) (DEPRECATED)"`
 
 	Bitwarden BitwardenConfig `embed:"" prefix:"bitwarden-" envprefix:"BITWARDEN_" group:"Bitwarden Options:"`
 	Infisical InfisicalConfig `embed:"" prefix:"infisical-" envprefix:"INFISICAL_" group:"Infisical Options:"`

@@ -1,4 +1,4 @@
-package secrets
+package secretsmanager
 
 import (
 	"github.com/bitwarden/sdk-go/v2"

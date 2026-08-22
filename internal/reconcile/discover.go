@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 
+	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
@@ -138,6 +140,7 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ValueTrue
 }
 
+// isContainerHealthy(container)
 func isContainerHealthy(container api.ContainerSummary) bool {
 	if container.ExitCode == 0 && container.State == StateRunning {
 		return container.Health != Unhealthy
@@ -146,4 +149,111 @@ func isContainerHealthy(container api.ContainerSummary) bool {
 	}
 
 	return false
+}
+
+// loadSharedSecrets gathers shared secrets from:
+// 1. External secrets manager (Bitwarden / Infisical), if configured
+//    DEPRECATED: External secrets manager integration will be removed in a future release.
+// 2. Root *.age files in the stacks directory
+// Root *.age secrets override external secrets manager values on collision.
+// Returns the merged secret map and the list of root *.age file paths for change tracking.
+func (r *Reconciler) loadSharedSecrets() (map[string]*string, []string, error) {
+	sharedSecrets := make(map[string]*string)
+
+	// 1. Fetch from external secrets manager if configured (deprecated)
+	if r.sClient != nil {
+		secrets, err := r.sClient.FetchAll()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to fetch external secrets: %w", err)
+		}
+		for _, s := range secrets {
+			val := s.Value
+			sharedSecrets[s.Key] = &val
+		}
+	}
+
+	// 2. Discover and decrypt root *.age files
+	stacksRootDir := filepath.Join(r.gClient.Path(), r.stackPath)
+	mergedSecrets, rootAgeFiles, err := r.decryptAgeEnvs(stacksRootDir, sharedSecrets)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decrypt root shared age secrets in %s: %w", stacksRootDir, err)
+	}
+
+	return mergedSecrets, rootAgeFiles, nil
+}
+
+// decryptAgeEnvs scans dir for *.age files, decrypts each, and merges results
+// into base (which may be nil). Returns a new map and the discovered *.age file paths.
+// Stack-specific keys override base keys.
+func (r *Reconciler) decryptAgeEnvs(dir string, base map[string]*string) (map[string]*string, []string, error) {
+	result := make(map[string]*string, len(base))
+	maps.Copy(result, base)
+
+	files, err := r.ageClient.FindAgeFiles(dir)
+	if err != nil {
+		return result, nil, err
+	}
+
+	for _, ageFile := range files {
+		envs, err := r.ageClient.DecryptEnvFile(ageFile)
+		if err != nil {
+			return nil, nil, err
+		}
+		maps.Copy(result, envs)
+	}
+
+	return result, files, nil
+}
+
+// loadProjectWithSecrets loads a compose project and injects decrypted age secrets into its services.
+// It also returns all discovered *.age files for the project.
+func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dockercompose.ComposeConfig, sharedAgeEnvs map[string]*string) (*types.Project, []string, error) {
+	project, err := r.dClient.LoadProject(ctx, composeCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stackAgeEnvs := make(map[string]*string)
+	maps.Copy(stackAgeEnvs, sharedAgeEnvs)
+
+	var allStackAgeFiles []string
+	seenDirs := make(map[string]struct{})
+
+	// Scan stack working directory first
+	stackAgeEnvs, stackAgeFiles, err := r.decryptAgeEnvs(composeCfg.WorkingDir, stackAgeEnvs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to process age files in %s: %w", composeCfg.WorkingDir, err)
+	}
+	seenDirs[composeCfg.WorkingDir] = struct{}{}
+	allStackAgeFiles = append(allStackAgeFiles, stackAgeFiles...)
+
+	// Scan included compose file directories
+	for _, composeFile := range project.ComposeFiles {
+		dir := filepath.Dir(composeFile)
+		if _, seen := seenDirs[dir]; seen {
+			continue
+		}
+		seenDirs[dir] = struct{}{}
+		var ageFiles []string
+		stackAgeEnvs, ageFiles, err = r.decryptAgeEnvs(dir, stackAgeEnvs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to process age files in %s: %w", dir, err)
+		}
+		allStackAgeFiles = append(allStackAgeFiles, ageFiles...)
+	}
+
+	if len(stackAgeEnvs) > 0 {
+		project, err = project.WithServicesTransform(func(name string, svc types.ServiceConfig) (types.ServiceConfig, error) {
+			if svc.Environment == nil {
+				svc.Environment = make(types.MappingWithEquals)
+			}
+			maps.Copy(svc.Environment, stackAgeEnvs)
+			return svc, nil
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to inject age secrets into project services for %s: %w", project.Name, err)
+		}
+	}
+
+	return project, allStackAgeFiles, nil
 }

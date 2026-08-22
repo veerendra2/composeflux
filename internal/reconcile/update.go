@@ -12,19 +12,25 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	envs, _, err := r.loadEnvAndConfig()
+	globalEnvs, _, err := r.loadStackConfig()
 	if err != nil {
 		return err
 	}
 
-	composeCfgs, err := r.discoverComposeStack(envs)
+	composeCfgs, err := r.discoverComposeStack(globalEnvs)
 	if err != nil {
 		slog.Error("Failed to discover compose stacks for image update check", "error", err)
 		return err
 	}
 
+	// Load shared secrets (external secrets manager + root *.age files)
+	sharedAgeEnvs, _, err := r.loadSharedSecrets()
+	if err != nil {
+		slog.Warn("Failed to load shared secrets for image updates", "error", err)
+	}
+
 	for _, composeCfg := range composeCfgs {
-		project, err := r.dClient.LoadProject(ctx, composeCfg)
+		project, _, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedAgeEnvs)
 		if err != nil {
 			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
 			continue

@@ -27,9 +27,15 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	}
 
 	if len(toReconcile) > 0 {
-		envs, _, err := r.loadEnvAndConfig()
+		globalEnvs, _, err := r.loadStackConfig()
 		if err != nil {
 			return err
+		}
+
+		// Load shared secrets (external secrets manager + root *.age files)
+		sharedAgeEnvs, _, err := r.loadSharedSecrets()
+		if err != nil {
+			slog.Warn("Failed to load shared secrets for health reconcile", "error", err)
 		}
 
 		for _, stackName := range toReconcile {
@@ -47,17 +53,17 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 				continue
 			}
 
-			composeCfg, err := r.buildComposeConfig(stackPath, envs)
+			composeCfg, err := r.buildComposeConfig(stackPath, globalEnvs)
 			if err != nil {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", stackName, "error", err)
 				continue
 			}
 
-			project, err := r.dClient.LoadProject(ctx, composeCfg)
+			project, _, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedAgeEnvs)
 			if err != nil {
 				r.healthFailCounts[stackName]++
-				slog.Warn("Skipping, failed to load project", "path", composeCfg.WorkingDir, "error", err)
+				slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 				continue
 			}
 

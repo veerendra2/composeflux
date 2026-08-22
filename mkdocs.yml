@@ -15,8 +15,9 @@ nav:
   - Getting Started: GettingStarted.md
   - Development: Development.md
   - How-to Guides:
-      - Bitwarden Secrets Manager Setup: how-to-guides/Bitwarden.md
-      - Infisical Secrets Manager Setup: how-to-guides/Infisical.md
+      - Age Encrypted Secrets Setup: how-to-guides/AgeSecrets.md
+      - Bitwarden Secrets Manager Setup (Deprecated): how-to-guides/Bitwarden.md
+      - Infisical Secrets Manager Setup (Deprecated): how-to-guides/Infisical.md
       - GitHub Deploy Keys Setup: how-to-guides/GithubDeployKeys.md
 
 markdown_extensions:

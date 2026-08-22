@@ -1,4 +1,8 @@
-# Infisical Secrets Manager Setup
+# Infisical Secrets Manager Setup (Deprecated)
+
+!!! warning "Deprecated"
+
+    Infisical Secrets Manager integration is deprecated and will be removed in a future release. We recommend using [Age Encrypted Secrets](AgeSecrets.md) for offline, in-repository secret management.
 
 Set up Infisical as the secrets provider for ComposeFlux.
 
