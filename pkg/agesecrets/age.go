@@ -19,11 +19,22 @@ type Config struct {
 
 type Client struct {
 	passphrase string
+	identity   *age.ScryptIdentity
 }
 
-// New creates a new agesecrets client.
+// New creates a new agesecrets client and precomputes the scrypt identity.
 func New(passphrase string) *Client {
-	return &Client{passphrase: passphrase}
+	var identity *age.ScryptIdentity
+	if passphrase != "" {
+		id, err := age.NewScryptIdentity(passphrase)
+		if err == nil {
+			identity = id
+		}
+	}
+	return &Client{
+		passphrase: passphrase,
+		identity:   identity,
+	}
 }
 
 // FindAgeFiles returns all *.age files located directly in dir (non-recursive), sorted by filename.
@@ -58,9 +69,13 @@ func (c *Client) DecryptEnvFile(filePath string) (map[string]*string, error) {
 		return nil, fmt.Errorf("failed to read age file %s: %w", filePath, err)
 	}
 
-	identity, err := age.NewScryptIdentity(c.passphrase)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)
+	identity := c.identity
+	if identity == nil {
+		id, err := age.NewScryptIdentity(c.passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)
+		}
+		identity = id
 	}
 
 	// Support both ASCII-armored (age -a) and raw binary age formats

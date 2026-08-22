@@ -140,7 +140,6 @@ func isManagedStack(containers []api.ContainerSummary) bool {
 	return len(containers) > 0 && containers[0].Labels != nil && containers[0].Labels[LabelManaged] == ValueTrue
 }
 
-// isContainerHealthy(container)
 func isContainerHealthy(container api.ContainerSummary) bool {
 	if container.ExitCode == 0 && container.State == StateRunning {
 		return container.Health != Unhealthy
@@ -164,11 +163,12 @@ func (r *Reconciler) loadSharedSecrets() (map[string]*string, []string, error) {
 	if r.sClient != nil {
 		secrets, err := r.sClient.FetchAll()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch external secrets: %w", err)
-		}
-		for _, s := range secrets {
-			val := s.Value
-			sharedSecrets[s.Key] = &val
+			slog.Warn("Failed to fetch external secrets, continuing with root age secrets", "error", err)
+		} else {
+			for _, s := range secrets {
+				val := s.Value
+				sharedSecrets[s.Key] = &val
+			}
 		}
 	}
 
@@ -188,6 +188,10 @@ func (r *Reconciler) loadSharedSecrets() (map[string]*string, []string, error) {
 func (r *Reconciler) decryptAgeEnvs(dir string, base map[string]*string) (map[string]*string, []string, error) {
 	result := make(map[string]*string, len(base))
 	maps.Copy(result, base)
+
+	if r.ageClient == nil {
+		return result, nil, nil
+	}
 
 	files, err := r.ageClient.FindAgeFiles(dir)
 	if err != nil {

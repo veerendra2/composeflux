@@ -112,14 +112,11 @@ services:
 
 ## Usage in Compose Stacks
 
-Decrypted keys from `*.age` files are automatically injected into service environments. You can reference them using standard Compose environment interpolation or access them directly inside containers.
+Decrypted keys from `*.age` files are automatically injected into each container's environment in the stack without needing manual `environment:` entries in your compose file.
 
 ```yaml
 services:
   app:
     image: myapp:latest
-    environment:
-      # Optional: Explicit reference
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
-      # Decrypted keys not listed here are also automatically injected into the container environment
+    # All decrypted secrets from *.age files are injected into this container environment automatically.
 ```
