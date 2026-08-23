@@ -206,17 +206,16 @@ func (r *Reconciler) decryptAgeEnvs(dir string, base map[string]*string) (map[st
 		maps.Copy(result, envs)
 	}
 
+	if len(files) > 0 {
+		slog.Debug("Loaded age secret files for directory", "dir", dir, "files_count", len(files), "total_keys", len(result))
+	}
+
 	return result, files, nil
 }
 
 // loadProjectWithSecrets loads a compose project and injects decrypted age secrets into its services.
 // It also returns all discovered *.age files for the project.
 func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dockercompose.ComposeConfig, sharedAgeEnvs map[string]*string) (*types.Project, []string, error) {
-	project, err := r.dClient.LoadProject(ctx, composeCfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	stackAgeEnvs := make(map[string]*string)
 	maps.Copy(stackAgeEnvs, sharedAgeEnvs)
 
@@ -230,6 +229,18 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dock
 	}
 	seenDirs[composeCfg.WorkingDir] = struct{}{}
 	allStackAgeFiles = append(allStackAgeFiles, stackAgeFiles...)
+
+	// Populate composeCfg.Env with shared and stack secrets before LoadProject so ${VAR} interpolation succeeds
+	for k, v := range stackAgeEnvs {
+		if v != nil {
+			composeCfg.Env = append(composeCfg.Env, fmt.Sprintf("%s=%s", k, *v))
+		}
+	}
+
+	project, err := r.dClient.LoadProject(ctx, composeCfg)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Scan included compose file directories
 	for _, composeFile := range project.ComposeFiles {
