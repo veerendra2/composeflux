@@ -253,7 +253,10 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dock
 	// Scan included compose file directories for additional age secret files
 	var hasIncludedAgeFiles bool
 	for _, composeFile := range project.ComposeFiles {
-		dir := filepath.Dir(composeFile)
+		if !filepath.IsAbs(composeFile) {
+			composeFile = filepath.Join(project.WorkingDir, composeFile)
+		}
+		dir := filepath.Dir(filepath.Clean(composeFile))
 		if _, seen := seenDirs[dir]; seen {
 			continue
 		}
