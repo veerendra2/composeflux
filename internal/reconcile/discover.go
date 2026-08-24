@@ -213,7 +213,8 @@ func (r *Reconciler) decryptAgeEnvs(dir string, base map[string]*string) (map[st
 	return result, files, nil
 }
 
-// loadProjectWithSecrets loads a compose project and injects decrypted age secrets into its services.
+// loadProjectWithSecrets loads a compose project with decrypted age and shared secrets
+// populated into the compose environment for ${VAR} interpolation.
 // It also returns all discovered *.age files for the project.
 func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dockercompose.ComposeConfig, sharedAgeEnvs map[string]*string) (*types.Project, []string, error) {
 	stackAgeEnvs := make(map[string]*string)
@@ -230,19 +231,27 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dock
 	seenDirs[composeCfg.WorkingDir] = struct{}{}
 	allStackAgeFiles = append(allStackAgeFiles, stackAgeFiles...)
 
-	// Populate composeCfg.Env with shared and stack secrets before LoadProject so ${VAR} interpolation succeeds
-	for k, v := range stackAgeEnvs {
-		if v != nil {
-			composeCfg.Env = append(composeCfg.Env, fmt.Sprintf("%s=%s", k, *v))
+	buildEnvList := func() []string {
+		var envList []string
+		envList = append(envList, composeCfg.Env...)
+		for k, v := range stackAgeEnvs {
+			if v != nil {
+				envList = append(envList, fmt.Sprintf("%s=%s", k, *v))
+			}
 		}
+		return envList
 	}
 
-	project, err := r.dClient.LoadProject(ctx, composeCfg)
+	initialCfg := composeCfg
+	initialCfg.Env = buildEnvList()
+
+	project, err := r.dClient.LoadProject(ctx, initialCfg)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Scan included compose file directories
+	// Scan included compose file directories for additional age secret files
+	var hasIncludedAgeFiles bool
 	for _, composeFile := range project.ComposeFiles {
 		dir := filepath.Dir(composeFile)
 		if _, seen := seenDirs[dir]; seen {
@@ -254,19 +263,19 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, composeCfg dock
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to process age files in %s: %w", dir, err)
 		}
-		allStackAgeFiles = append(allStackAgeFiles, ageFiles...)
+		if len(ageFiles) > 0 {
+			hasIncludedAgeFiles = true
+			allStackAgeFiles = append(allStackAgeFiles, ageFiles...)
+		}
 	}
 
-	if len(stackAgeEnvs) > 0 {
-		project, err = project.WithServicesTransform(func(name string, svc types.ServiceConfig) (types.ServiceConfig, error) {
-			if svc.Environment == nil {
-				svc.Environment = make(types.MappingWithEquals)
-			}
-			maps.Copy(svc.Environment, stackAgeEnvs)
-			return svc, nil
-		})
+	// If included directories provided new secrets, reload the project so included compose files can interpolate them
+	if hasIncludedAgeFiles {
+		finalCfg := composeCfg
+		finalCfg.Env = buildEnvList()
+		project, err = r.dClient.LoadProject(ctx, finalCfg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to inject age secrets into project services for %s: %w", project.Name, err)
+			return nil, nil, err
 		}
 	}
 
