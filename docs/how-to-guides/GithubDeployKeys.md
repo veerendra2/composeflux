@@ -51,13 +51,13 @@ To have ComposeFlux fetch `SSH_PRIVATE_KEY` from your secrets manager, set `GIT_
 # In compose.yml
 environment:
   GIT_REPO_URL: git@github.com:user/repo.git # SSH URL
-  SECRETS_PROVIDER: bitwarden # or infisical
+  REMOTE_SECRETS_PROVIDER: bitwarden # or infisical
   GIT_DEPLOY_KEY_SECRET_REF: SSH_PRIVATE_KEY # Change if using a different name
 ```
 
 ## Alternative: Mount Local Key
 
-Skip secrets manager and mount key directly (no `SECRETS_PROVIDER` needed):
+Skip the remote secrets provider and mount the key directly (no `REMOTE_SECRETS_PROVIDER` needed):
 
 ```yaml
 # In compose.yml

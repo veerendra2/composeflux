@@ -1,9 +1,10 @@
-package agesecrets
+package localsecrets
 
 import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,32 +14,41 @@ import (
 	"github.com/compose-spec/compose-go/v2/dotenv"
 )
 
-type Config struct {
-	Passphrase string `name:"age-passphrase" help:"Passphrase for age-encrypted secret files" env:"AGE_PASSPHRASE" default:"" group:"Age Options:"`
-}
-
-type Client struct {
+type ageClient struct {
 	passphrase string
 	identity   *age.ScryptIdentity
 }
 
-// New creates a new agesecrets client and precomputes the scrypt identity.
-func New(passphrase string) *Client {
+// newAgeClient prepares the reusable age identity when a passphrase is configured.
+func newAgeClient(passphrase string) *ageClient {
 	var identity *age.ScryptIdentity
 	if passphrase != "" {
-		id, err := age.NewScryptIdentity(passphrase)
-		if err == nil {
-			identity = id
-		}
+		identity, _ = age.NewScryptIdentity(passphrase)
 	}
-	return &Client{
-		passphrase: passphrase,
-		identity:   identity,
-	}
+	return &ageClient{passphrase: passphrase, identity: identity}
 }
 
-// FindAgeFiles returns all *.age files located directly in dir (non-recursive), sorted by filename.
-func (c *Client) FindAgeFiles(dir string) ([]string, error) {
+// Decrypt scans dir for age-encrypted dotenv files and returns their merged values and paths.
+func (c *ageClient) Decrypt(dir string) (map[string]*string, []string, error) {
+	files, err := findFiles(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result := make(map[string]*string)
+	for _, file := range files {
+		envs, err := c.decryptEnvFile(file)
+		if err != nil {
+			return nil, nil, err
+		}
+		maps.Copy(result, envs)
+	}
+
+	return result, files, nil
+}
+
+// findFiles returns all *.age files located directly in dir, sorted by filename.
+func findFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -54,12 +64,12 @@ func (c *Client) FindAgeFiles(dir string) ([]string, error) {
 		}
 	}
 	sort.Strings(files)
+
 	return files, nil
 }
 
-// DecryptEnvFile decrypts an age-encrypted dotenv file (binary or armored) using the configured passphrase.
-// Values are returned as map[string]*string compatible with Docker Compose types.MappingWithEquals.
-func (c *Client) DecryptEnvFile(filePath string) (map[string]*string, error) {
+// decryptEnvFile decrypts an age-encrypted dotenv file in binary or armored format.
+func (c *ageClient) decryptEnvFile(filePath string) (map[string]*string, error) {
 	if c.passphrase == "" {
 		return nil, fmt.Errorf("cannot decrypt %s: age passphrase is not set (use --age-passphrase or AGE_PASSPHRASE)", filePath)
 	}
@@ -69,19 +79,17 @@ func (c *Client) DecryptEnvFile(filePath string) (map[string]*string, error) {
 		return nil, fmt.Errorf("failed to read age file %s: %w", filePath, err)
 	}
 
-	identity := c.identity
-	if identity == nil {
-		id, err := age.NewScryptIdentity(c.passphrase)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)
-		}
-		identity = id
-	}
-
-	// Support both ASCII-armored (age -a) and raw binary age formats
 	var inReader io.Reader = bytes.NewReader(data)
 	if bytes.Contains(data, []byte("-----BEGIN AGE ENCRYPTED FILE-----")) {
 		inReader = armor.NewReader(bytes.NewReader(data))
+	}
+
+	identity := c.identity
+	if identity == nil {
+		identity, err = age.NewScryptIdentity(c.passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)
+		}
 	}
 
 	decryptedReader, err := age.Decrypt(inReader, identity)
@@ -100,9 +108,9 @@ func (c *Client) DecryptEnvFile(filePath string) (map[string]*string, error) {
 	}
 
 	result := make(map[string]*string, len(envVars))
-	for k, v := range envVars {
-		val := v
-		result[k] = &val
+	for key, value := range envVars {
+		value := value
+		result[key] = &value
 	}
 
 	return result, nil

@@ -1,8 +1,4 @@
-# Bitwarden Secrets Manager Setup (Deprecated)
-
-!!! warning "Deprecated"
-
-    Bitwarden Secrets Manager integration is deprecated and will be removed in a future release. We recommend using [Age Encrypted Secrets](AgeSecrets.md) for offline, in-repository secret management.
+# Bitwarden Secrets Manager Setup
 
 Set up Bitwarden Secrets Manager as the secrets provider for ComposeFlux.
 
@@ -66,7 +62,7 @@ Make sure you have the following values for ComposeFlux:
 Add to your `.env` or compose file:
 
 ```bash
-SECRETS_PROVIDER=bitwarden
+REMOTE_SECRETS_PROVIDER=bitwarden
 BITWARDEN_ACCESS_TOKEN=<your-access-token>
 BITWARDEN_ORGANIZATION_ID=<your-org-id>
 BITWARDEN_PROJECT_ID=<your-project-id>

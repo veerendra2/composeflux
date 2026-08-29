@@ -18,6 +18,7 @@ var cli struct {
 	Version kong.VersionFlag `name:"version" help:"Print version information and exit"`
 }
 
+// main parses the CLI and dispatches the selected ComposeFlux command.
 func main() {
 	ctx := kong.Parse(&cli,
 		kong.Name(appName),

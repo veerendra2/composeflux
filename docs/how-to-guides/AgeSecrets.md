@@ -7,15 +7,15 @@ ComposeFlux natively supports decrypting `*.age` encrypted dotenv files directly
 ## Overview
 
 - Encrypted `.env.age` (or any `*.age`) files are committed directly to your Git repository.
-- Secrets are decrypted in memory using a passphrase (`--age-passphrase` or `AGE_PASSPHRASE`) and injected directly into container environments.
+- Secrets are decrypted in memory using a passphrase (`--age-passphrase` or `AGE_PASSPHRASE`) and made available for Docker Compose interpolation.
 - When `*.age` files are updated in Git, ComposeFlux detects the change and triggers an automatic redeploy.
 
 ## Secret Hierarchy & Layering
 
 ComposeFlux supports layered secrets:
 
-1. **Shared Root Secrets**: Place `*.age` files at the root of your `STACK_PATH` directory (e.g. `stacks/shared.env.age`). These variables are injected into **all** stacks.
-2. **Stack-Specific Secrets**: Place `*.age` files in the stack directory next to `compose.yml` (e.g. `stacks/nextcloud/secrets.env.age`). These apply only to that stack and override matching keys from shared root secrets.
+1. **Shared Root Secrets**: Place `*.age` files at the root of your `STACK_PATH` directory (e.g. `stacks/shared.env.age`). These variables are available for interpolation in **all** stacks.
+2. **Stack-Specific Secrets**: Place `*.age` files in the stack directory next to `compose.yml` (e.g. `stacks/nextcloud/secrets.env.age`). These are available only to that stack and override matching keys from shared root secrets.
 3. **Included Subdirectory Secrets**: If a compose file uses `include` directives targeting other directories, any `*.age` files located in those included directories are also loaded and mapped as dependencies.
 
 ### Directory Structure Example
@@ -104,11 +104,13 @@ services:
     environment:
       GIT_REPO_URL: git@github.com:user/stacks-repo.git
       STACK_PATH: stacks
-      AGE_PASSPHRASE: "your-secure-passphrase"
+      AGE_PASSPHRASE: ${AGE_PASSPHRASE}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.ssh/id_rsa:/.ssh/composeflux_id_rsa:ro
 ```
+
+Provide `AGE_PASSPHRASE` through a protected runtime environment variable. Do not commit the passphrase to the Compose file or repository. If you use a local `.env` file, exclude it from Git and restrict its file permissions.
 
 ## Usage in Compose Stacks
 
@@ -122,3 +124,5 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       API_KEY: ${API_KEY}
 ```
+
+ComposeFlux does not automatically add every decrypted key to every container. A value reaches a container only when its Compose service explicitly references the key, as shown above.

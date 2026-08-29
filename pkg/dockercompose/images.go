@@ -10,8 +10,8 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/distribution/reference"
 	dockerconfigtypes "github.com/docker/cli/cli/config/types"
-	mobyClient "github.com/moby/moby/client"
 	dockerregistry "github.com/docker/docker/registry"
+	mobyClient "github.com/moby/moby/client"
 )
 
 // HasImageUpdates checks if any service image in the project has a newer version in the registry.
@@ -21,12 +21,9 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 			continue
 		}
 
-		// Skip digest-pinned images (e.g. image@sha256:abc…) — they are immutable
 		named, parseErr := reference.ParseNormalizedNamed(svc.Image)
-		if parseErr == nil {
-			if _, isDigested := named.(reference.Digested); isDigested {
-				continue
-			}
+		if _, isDigested := named.(reference.Digested); parseErr == nil && isDigested {
+			continue
 		}
 
 		localInfo, err := c.docker.ImageInspect(ctx, svc.Image)
@@ -47,15 +44,9 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 			continue
 		}
 
-		// Build auth token from docker config for private registry support
 		encodedAuth := ""
 		if parseErr == nil {
-			if repoInfo, repoErr := dockerregistry.ParseRepositoryInfo(named); repoErr == nil {
-				cliAuth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
-				if buf, err := json.Marshal(dockerconfigtypes.AuthConfig(cliAuth)); err == nil {
-					encodedAuth = base64.URLEncoding.EncodeToString(buf)
-				}
-			}
+			encodedAuth = c.registryAuth(named)
 		}
 
 		remoteDist, err := c.docker.DistributionInspect(ctx, svc.Image, mobyClient.DistributionInspectOptions{
@@ -67,17 +58,7 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		}
 
 		remoteDigest := remoteDist.Descriptor.Digest.String()
-		hasMatch := false
-		for _, localDigest := range localInfo.RepoDigests {
-			// localDigest format: "name@sha256:abc…" — compare only the digest part
-			parts := strings.SplitN(localDigest, "@", 2)
-			if len(parts) == 2 && parts[1] == remoteDigest {
-				hasMatch = true
-				break
-			}
-		}
-
-		if !hasMatch {
+		if !containsDigest(localInfo.RepoDigests, remoteDigest) {
 			slog.Info("Image update available", "stack", project.Name, "service", svc.Name, "image", svc.Image)
 			slog.Debug("Image digest mismatch", "image", svc.Image,
 				"local_digests", localInfo.RepoDigests, "remote_digest", remoteDigest)
@@ -85,4 +66,29 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		}
 	}
 	return false, nil
+}
+
+// registryAuth encodes Docker CLI credentials for a registry manifest request.
+func (c *client) registryAuth(named reference.Named) string {
+	repoInfo, err := dockerregistry.ParseRepositoryInfo(named)
+	if err != nil {
+		return ""
+	}
+	auth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
+	encoded, err := json.Marshal(dockerconfigtypes.AuthConfig(auth))
+	if err != nil {
+		return ""
+	}
+	return base64.URLEncoding.EncodeToString(encoded)
+}
+
+// containsDigest reports whether any local repository digest matches the remote manifest.
+func containsDigest(repoDigests []string, remoteDigest string) bool {
+	for _, repoDigest := range repoDigests {
+		parts := strings.SplitN(repoDigest, "@", 2)
+		if len(parts) == 2 && parts[1] == remoteDigest {
+			return true
+		}
+	}
+	return false
 }

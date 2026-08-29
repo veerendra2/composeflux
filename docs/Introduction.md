@@ -18,7 +18,7 @@ ComposeFlux runs a Git sync loop in daemon mode (`run` command). It performs an 
 remote Git repository for changes and syncs again when updates are detected.
 
 1. Pulls latest commits and tracks changed file paths
-2. Loads shared secrets (external secrets manager and root `*.age` files)
+2. Loads shared secrets (remote provider and root `*.age` files)
 3. Loads environment variables from [`stack.yml`](#stack-configuration) (if present)
 4. Discovers compose stacks (one level deep in `STACK_PATH`)
 5. Builds dependency file set for each stack (compose files, include blocks, env files, mounted configs, secrets, build context, stack `*.age` files)

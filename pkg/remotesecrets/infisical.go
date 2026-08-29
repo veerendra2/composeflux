@@ -1,4 +1,4 @@
-package secretsmanager
+package remotesecrets
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type InfisicalConfig struct {
 }
 
 type infisicalClient struct {
-	projectId   string
+	projectID   string
 	environment string
 	secretPaths []string
 
@@ -32,7 +32,7 @@ func (c *infisicalClient) Get(key string) (string, error) {
 		secret, err := c.infClient.Secrets().Retrieve(infisical.RetrieveSecretOptions{
 			SecretKey:   key,
 			Environment: c.environment,
-			ProjectID:   c.projectId,
+			ProjectID:   c.projectID,
 			SecretPath:  path,
 		})
 		if err == nil {
@@ -44,14 +44,14 @@ func (c *infisicalClient) Get(key string) (string, error) {
 }
 
 // FetchAll retrieves all secrets.
-func (c *infisicalClient) FetchAll() ([]Secret, error) {
-	var result []Secret
+func (c *infisicalClient) FetchAll() (map[string]*string, error) {
+	result := make(map[string]*string)
 	var hasSuccess bool
 
 	for _, path := range c.secretPaths {
 		listResult, err := c.infClient.Secrets().ListSecrets(infisical.ListSecretsOptions{
 			Environment: c.environment,
-			ProjectID:   c.projectId,
+			ProjectID:   c.projectID,
 			SecretPath:  path,
 		})
 		if err != nil {
@@ -62,10 +62,8 @@ func (c *infisicalClient) FetchAll() ([]Secret, error) {
 		hasSuccess = true
 		slog.Debug("Fetched secrets from path", "path", path, "count", len(listResult.Secrets))
 		for _, secret := range listResult.Secrets {
-			result = append(result, Secret{
-				Key:   secret.SecretKey,
-				Value: secret.SecretValue,
-			})
+			value := secret.SecretValue
+			result[secret.SecretKey] = &value
 		}
 	}
 
@@ -76,38 +74,41 @@ func (c *infisicalClient) FetchAll() ([]Secret, error) {
 	return result, nil
 }
 
+// Close releases provider resources; the Infisical SDK requires no explicit cleanup.
 func (c *infisicalClient) Close() {
 }
 
+// NewInfisicalClient authenticates and returns a client for the configured secret paths.
 func NewInfisicalClient(ctx context.Context, cfg InfisicalConfig) (Client, error) {
 	autoTokenRefresh := true
 	client := infisical.NewInfisicalClient(ctx, infisical.Config{
 		SiteUrl:          cfg.SiteUrl,
 		AutoTokenRefresh: &autoTokenRefresh,
 	})
-	_, err := client.Auth().UniversalAuthLogin(cfg.ClientID, cfg.ClientSecret)
-	if err != nil {
+	if _, err := client.Auth().UniversalAuthLogin(cfg.ClientID, cfg.ClientSecret); err != nil {
 		return nil, err
 	}
 
-	// Parse comma-separated paths once
-	rawPaths := strings.Split(cfg.SecretPath, ",")
-	var secretPaths []string
-	for _, p := range rawPaths {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			secretPaths = append(secretPaths, p)
-		}
-	}
-
+	secretPaths := parseSecretPaths(cfg.SecretPath)
 	if len(secretPaths) == 0 {
 		return nil, fmt.Errorf("no secret paths provided in INFISICAL_SECRET_PATH")
 	}
 
 	return &infisicalClient{
-		projectId:   cfg.ProjectID,
+		projectID:   cfg.ProjectID,
 		environment: cfg.Environment,
 		secretPaths: secretPaths,
 		infClient:   client,
 	}, nil
+}
+
+// parseSecretPaths normalizes a comma-separated list of Infisical paths.
+func parseSecretPaths(value string) []string {
+	var paths []string
+	for _, path := range strings.Split(value, ",") {
+		if path = strings.TrimSpace(path); path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths
 }

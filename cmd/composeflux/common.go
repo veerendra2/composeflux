@@ -11,36 +11,36 @@ import (
 	"time"
 
 	"github.com/veerendra2/composeflux/internal/reconcile"
-	"github.com/veerendra2/composeflux/pkg/agesecrets"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
-	"github.com/veerendra2/composeflux/pkg/secretsmanager"
+	"github.com/veerendra2/composeflux/pkg/localsecrets"
+	"github.com/veerendra2/composeflux/pkg/remotesecrets"
 	"github.com/veerendra2/composeflux/pkg/source"
 	"github.com/veerendra2/gopackages/version"
 )
 
 type CommonConfig struct {
-	Secrets       secretsmanager.Config `embed:""`
-	Age           agesecrets.Config     `embed:""`
-	Reconciler    reconcile.Config      `embed:"" group:"Reconciler Options:"`
-	Source        source.Config         `embed:"" group:"Git Source Options:"`
-	DockerCompose dockercompose.Config  `embed:"" group:"Docker Compose Options:"`
+	RemoteSecrets remotesecrets.Config `embed:""`
+	LocalSecrets  localsecrets.Config  `embed:""`
+	Reconciler    reconcile.Config     `embed:"" group:"Reconciler Options:"`
+	Source        source.Config        `embed:"" group:"Git Source Options:"`
+	DockerCompose dockercompose.Config `embed:"" group:"Docker Compose Options:"`
 }
 
 // Validate checks provider-specific configuration
 func (c *CommonConfig) Validate() error {
-	switch c.Secrets.Provider {
+	switch c.RemoteSecrets.Provider {
 	case "":
 		if c.Source.DeployKeySecretRef != "" {
-			return fmt.Errorf("--deploy-key-secret-ref requires a secrets provider (--secrets-provider)")
+			return fmt.Errorf("--deploy-key-secret-ref requires a remote secrets provider (--remote-secrets-provider)")
 		}
 	case "bitwarden":
-		if c.Secrets.Bitwarden.AccessToken == "" || c.Secrets.Bitwarden.OrgID == "" || c.Secrets.Bitwarden.ProjectID == "" {
+		if c.RemoteSecrets.Bitwarden.AccessToken == "" || c.RemoteSecrets.Bitwarden.OrgID == "" || c.RemoteSecrets.Bitwarden.ProjectID == "" {
 			return fmt.Errorf("bitwarden provider requires: --bitwarden-access-token, " +
 				"--bitwarden-organization-id, --bitwarden-project-id")
 		}
 	case "infisical":
-		if c.Secrets.Infisical.ClientID == "" || c.Secrets.Infisical.ClientSecret == "" ||
-			c.Secrets.Infisical.Environment == "" || c.Secrets.Infisical.ProjectID == "" {
+		if c.RemoteSecrets.Infisical.ClientID == "" || c.RemoteSecrets.Infisical.ClientSecret == "" ||
+			c.RemoteSecrets.Infisical.Environment == "" || c.RemoteSecrets.Infisical.ProjectID == "" {
 			return fmt.Errorf("infisical provider requires: --infisical-client-id, " +
 				"--infisical-client-secret, --infisical-environment, --infisical-project-id")
 		}
@@ -50,54 +50,22 @@ func (c *CommonConfig) Validate() error {
 
 // InitClients initializes all required clients (secrets, git, docker, reconciler)
 func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, func(), error) {
-	if c.Secrets.Provider != "" {
-		slog.Warn("External secrets manager integration is deprecated and will be removed in a future release. Migrate to age-encrypted secret files (*.age).", "provider", c.Secrets.Provider)
-	}
-
-	sClient, err := secretsmanager.New(ctx, c.Secrets)
+	rClient, err := remotesecrets.New(ctx, c.RemoteSecrets)
 	if err != nil {
-		slog.Error("Failed to create secrets manager client", "provider", c.Secrets.Provider, "error", err)
+		slog.Error("Failed to create remote secrets client", "provider", c.RemoteSecrets.Provider, "error", err)
 		return nil, nil, err
 	}
 
 	cleanup := func() {
-		if sClient != nil {
-			sClient.Close()
+		if rClient != nil {
+			rClient.Close()
 		}
 	}
 
-	// Fetch SSH deploy key from secrets manager if specified
 	if c.Source.DeployKeySecretRef != "" {
-		if sClient == nil {
-			return nil, cleanup, fmt.Errorf("--deploy-key-secret-ref requires a secrets provider (--secrets-provider)")
-		}
-		slog.Debug("Fetching SSH deploy key from secrets manager", "deploy_key_ref", c.Source.DeployKeySecretRef)
-
-		keyContent, err := sClient.Get(c.Source.DeployKeySecretRef)
-		if err != nil {
-			slog.Error("Failed to fetch SSH deploy key", "deploy_key_ref", c.Source.DeployKeySecretRef, "error", err)
+		if err := c.writeDeployKey(rClient); err != nil {
 			return nil, cleanup, err
 		}
-
-		if keyContent == "" {
-			slog.Error("SSH deploy key content is empty", "deploy_key_ref", c.Source.DeployKeySecretRef)
-			return nil, cleanup, fmt.Errorf("SSH deploy key content is empty: %s", c.Source.DeployKeySecretRef)
-		}
-
-		sshDir := filepath.Dir(c.Source.SSHKeyPath)
-		if err := os.MkdirAll(sshDir, 0700); err != nil {
-			slog.Error("Unable to create ssh directory", "path", sshDir, "error", err)
-			return nil, cleanup, err
-		}
-
-		_ = os.Remove(c.Source.SSHKeyPath)
-
-		if err := os.WriteFile(c.Source.SSHKeyPath, []byte(keyContent), 0600); err != nil {
-			slog.Error("Unable to write ssh deploy key content to file", "path", c.Source.SSHKeyPath, "error", err)
-			return nil, cleanup, err
-		}
-
-		slog.Info("SSH deploy key fetched and written successfully", "deploy_key_ref", c.Source.DeployKeySecretRef, "path", c.Source.SSHKeyPath)
 	}
 
 	// Create git client
@@ -125,22 +93,54 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 	slog.Info("Docker version", dockerVersion...)
 
-	// Create age client
-	ageClient := agesecrets.New(c.Age.Passphrase)
+	lClient := localsecrets.New(c.LocalSecrets)
 
 	// Create reconciler
-	rClient, err := reconcile.New(c.Reconciler, ageClient, sClient, gClient, dClient)
+	reconciler, err := reconcile.New(c.Reconciler, lClient, rClient, gClient, dClient)
 	if err != nil {
 		slog.Error("Failed to create reconciler client", "error", err)
 		return nil, cleanup, err
 	}
 
 	slog.Info("Reconciler configured", "stack_path", c.Reconciler.StackPath, "config_file", c.Reconciler.ConfigFile,
-		"secrets_manager", c.Secrets.Provider, "git_poll_interval", c.Reconciler.GitInterval,
+		"remote_secrets_provider", c.RemoteSecrets.Provider, "git_poll_interval", c.Reconciler.GitInterval,
 		"health_reconcile_interval", c.Reconciler.HealthInterval, "prune_interval", c.Reconciler.PruneInterval,
 		"image_update_cron", c.Reconciler.ImageUpdateSchedule)
 
-	return rClient, cleanup, nil
+	return reconciler, cleanup, nil
+}
+
+// writeDeployKey fetches the configured SSH key and writes it with restricted permissions.
+func (c *CommonConfig) writeDeployKey(client remotesecrets.Client) error {
+	if client == nil {
+		return fmt.Errorf("--deploy-key-secret-ref requires a remote secrets provider (--remote-secrets-provider)")
+	}
+
+	ref := c.Source.DeployKeySecretRef
+	slog.Debug("Fetching SSH deploy key from secrets manager", "deploy_key_ref", ref)
+	content, err := client.Get(ref)
+	if err != nil {
+		slog.Error("Failed to fetch SSH deploy key", "deploy_key_ref", ref, "error", err)
+		return err
+	}
+	if content == "" {
+		slog.Error("SSH deploy key content is empty", "deploy_key_ref", ref)
+		return fmt.Errorf("SSH deploy key content is empty: %s", ref)
+	}
+
+	sshDir := filepath.Dir(c.Source.SSHKeyPath)
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		slog.Error("Unable to create ssh directory", "path", sshDir, "error", err)
+		return err
+	}
+	_ = os.Remove(c.Source.SSHKeyPath)
+	if err := os.WriteFile(c.Source.SSHKeyPath, []byte(content), 0600); err != nil {
+		slog.Error("Unable to write ssh deploy key content to file", "path", c.Source.SSHKeyPath, "error", err)
+		return err
+	}
+
+	slog.Info("SSH deploy key fetched and written successfully", "deploy_key_ref", ref, "path", c.Source.SSHKeyPath)
+	return nil
 }
 
 // Setup performs shared startup: logs version info, sets up signal handling,

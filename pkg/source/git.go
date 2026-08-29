@@ -20,7 +20,7 @@ const (
 type Config struct {
 	RepoURL            string `name:"repo-url" help:"Git repository URL (SSH)" env:"GIT_REPO_URL" required:""`
 	SSHKeyPath         string `name:"ssh-key-path" help:"Path to SSH private key" env:"GIT_SSH_KEY_PATH" default:"/.ssh/composeflux_id_rsa"`
-	DeployKeySecretRef string `name:"deploy-key-secret-ref" help:"Deploy key secret reference (name or ID) to fetch from secrets manager (leave empty to use existing key at ssh-key-path)" env:"GIT_DEPLOY_KEY_SECRET_REF" default:"" group:"Git Source Options:"`
+	DeployKeySecretRef string `name:"deploy-key-secret-ref" help:"Deploy key secret reference (name or ID) to fetch from the remote secrets provider (leave empty to use existing key at ssh-key-path)" env:"GIT_DEPLOY_KEY_SECRET_REF" default:"" group:"Git Source Options:"`
 	ClonePath          string `name:"clone-path" help:"Local directory for git clone" env:"GIT_CLONE_PATH" default:"/opt/compose-stack"`
 	Branch             string `name:"branch" help:"Git branch to track" env:"GIT_BRANCH" default:"main" group:"Git Source Options:"`
 }
@@ -46,22 +46,13 @@ func (c *client) Pull(ctx context.Context) ([]string, error) {
 	// commit, so this correctly diffs old..new. If local HEAD diverged
 	// (manual checkout, crash), the diff may be misleading but the hard
 	// reset below corrects the state.
-	localRef, err := c.repo.Head()
-	oldSHA := ""
-	if err == nil {
-		oldSHA = localRef.Hash().String()
-	}
-
-	err = c.repo.FetchContext(ctx, &git.FetchOptions{
-		RemoteName: remoteName,
-		Auth:       c.sshAuth,
-		Force:      true, // required for force-pushed branches to update remote tracking refs
-	})
+	oldSHA := c.headSHA()
+	err := c.fetch(ctx)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil, fmt.Errorf("failed to fetch: %w", err)
 	}
 
-	remoteRef, err := c.repo.Reference(plumbing.NewRemoteReferenceName(remoteName, c.branch), true)
+	remoteRef, err := c.remoteReference()
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve remote ref: %w", err)
 	}
@@ -140,19 +131,8 @@ func (c *client) GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]
 
 // HasUpdates checks for remote changes and returns update status with short commit SHAs (for logging)
 func (c *client) HasUpdates(ctx context.Context) (bool, string, string, error) {
-	// Get local HEAD commit
-	localRef, err := c.repo.Head()
-	localSHA := ""
-	if err == nil {
-		localSHA = localRef.Hash().String()
-	}
-
-	// Fetch from remote
-	err = c.repo.FetchContext(ctx, &git.FetchOptions{
-		RemoteName: remoteName,
-		Auth:       c.sshAuth,
-		Force:      true,
-	})
+	localSHA := c.headSHA()
+	err := c.fetch(ctx)
 
 	if errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return false, shortSHA(localSHA), shortSHA(localSHA), nil
@@ -162,9 +142,7 @@ func (c *client) HasUpdates(ctx context.Context) (bool, string, string, error) {
 		return false, shortSHA(localSHA), "", err
 	}
 
-	// Get remote HEAD commit
-	remoteBranchRef := plumbing.ReferenceName(fmt.Sprintf("refs/remotes/%s/%s", remoteName, c.branch))
-	remoteRef, err := c.repo.Reference(remoteBranchRef, true)
+	remoteRef, err := c.remoteReference()
 	remoteSHA := ""
 	if err == nil {
 		remoteSHA = remoteRef.Hash().String()
@@ -172,6 +150,29 @@ func (c *client) HasUpdates(ctx context.Context) (bool, string, string, error) {
 
 	hasUpdates := localSHA != remoteSHA
 	return hasUpdates, shortSHA(remoteSHA), shortSHA(localSHA), nil
+}
+
+// fetch force-updates the configured remote-tracking references.
+func (c *client) fetch(ctx context.Context) error {
+	return c.repo.FetchContext(ctx, &git.FetchOptions{
+		RemoteName: remoteName,
+		Auth:       c.sshAuth,
+		Force:      true,
+	})
+}
+
+// headSHA returns the current local HEAD hash or an empty string when unavailable.
+func (c *client) headSHA() string {
+	ref, err := c.repo.Head()
+	if err != nil {
+		return ""
+	}
+	return ref.Hash().String()
+}
+
+// remoteReference resolves the configured branch's origin tracking reference.
+func (c *client) remoteReference() (*plumbing.Reference, error) {
+	return c.repo.Reference(plumbing.NewRemoteReferenceName(remoteName, c.branch), true)
 }
 
 // shortSHA returns the first 7 characters of a SHA for display purposes.
@@ -187,6 +188,7 @@ func (c *client) Path() string {
 	return c.path
 }
 
+// New opens or clones the configured repository and prepares its tracked branch.
 func New(cfg Config) (Client, error) {
 	sshAuth, err := ssh.NewPublicKeysFromFile(sshUser, cfg.SSHKeyPath, "")
 	if err != nil {
@@ -197,45 +199,14 @@ func New(cfg Config) (Client, error) {
 		return nil, fmt.Errorf("failed to create clone directory: %w", err)
 	}
 
-	repo, err := git.PlainOpen(cfg.ClonePath)
+	repo, cloned, err := openRepository(cfg, sshAuth)
 	if err != nil {
-		if errors.Is(err, git.ErrRepositoryNotExists) {
-			slog.Info("Cloning repository", "url", cfg.RepoURL, "branch", cfg.Branch, "path", cfg.ClonePath)
-			repo, err = git.PlainClone(cfg.ClonePath, false, &git.CloneOptions{
-				URL:           cfg.RepoURL,
-				Auth:          sshAuth,
-				ReferenceName: plumbing.NewBranchReferenceName(cfg.Branch),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to clone: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("failed to open repository: %w", err)
-		}
-	} else {
+		return nil, err
+	}
+	if !cloned {
 		slog.Info("Opened existing repository", "url", cfg.RepoURL, "branch", cfg.Branch, "path", cfg.ClonePath)
-		branchRef := plumbing.NewBranchReferenceName(cfg.Branch)
-		w, err := repo.Worktree()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get worktree: %w", err)
-		}
-
-		opts := &git.CheckoutOptions{Branch: branchRef}
-		if _, err := repo.Reference(branchRef, false); err != nil {
-			// Local branch doesn't exist yet — fetch and create it from remote tracking ref
-			if err := repo.Fetch(&git.FetchOptions{RemoteName: remoteName, Auth: sshAuth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return nil, fmt.Errorf("failed to fetch: %w", err)
-			}
-			remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(remoteName, cfg.Branch), true)
-			if err != nil {
-				return nil, fmt.Errorf("branch %q not found on remote: %w", cfg.Branch, err)
-			}
-			opts.Hash = remoteRef.Hash()
-			opts.Create = true
-		}
-
-		if err := w.Checkout(opts); err != nil {
-			return nil, fmt.Errorf("failed to checkout branch %q: %w", cfg.Branch, err)
+		if err := checkoutBranch(repo, cfg.Branch, sshAuth); err != nil {
+			return nil, err
 		}
 	}
 
@@ -245,4 +216,52 @@ func New(cfg Config) (Client, error) {
 		path:    cfg.ClonePath,
 		sshAuth: sshAuth,
 	}, nil
+}
+
+// openRepository opens the existing clone or creates it from the configured remote.
+func openRepository(cfg Config, auth *ssh.PublicKeys) (*git.Repository, bool, error) {
+	repo, err := git.PlainOpen(cfg.ClonePath)
+	if err == nil {
+		return repo, false, nil
+	}
+	if !errors.Is(err, git.ErrRepositoryNotExists) {
+		return nil, false, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	slog.Info("Cloning repository", "url", cfg.RepoURL, "branch", cfg.Branch, "path", cfg.ClonePath)
+	repo, err = git.PlainClone(cfg.ClonePath, false, &git.CloneOptions{
+		URL:           cfg.RepoURL,
+		Auth:          auth,
+		ReferenceName: plumbing.NewBranchReferenceName(cfg.Branch),
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to clone: %w", err)
+	}
+	return repo, true, nil
+}
+
+// checkoutBranch checks out an existing local branch or creates it from origin.
+func checkoutBranch(repo *git.Repository, branch string, auth *ssh.PublicKeys) error {
+	branchRef := plumbing.NewBranchReferenceName(branch)
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	options := &git.CheckoutOptions{Branch: branchRef}
+	if _, err := repo.Reference(branchRef, false); err != nil {
+		if err := repo.Fetch(&git.FetchOptions{RemoteName: remoteName, Auth: auth, Force: true}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return fmt.Errorf("failed to fetch: %w", err)
+		}
+		remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(remoteName, branch), true)
+		if err != nil {
+			return fmt.Errorf("branch %q not found on remote: %w", branch, err)
+		}
+		options.Hash = remoteRef.Hash()
+		options.Create = true
+	}
+	if err := worktree.Checkout(options); err != nil {
+		return fmt.Errorf("failed to checkout branch %q: %w", branch, err)
+	}
+	return nil
 }

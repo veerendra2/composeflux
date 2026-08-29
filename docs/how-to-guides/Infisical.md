@@ -1,8 +1,4 @@
-# Infisical Secrets Manager Setup (Deprecated)
-
-!!! warning "Deprecated"
-
-    Infisical Secrets Manager integration is deprecated and will be removed in a future release. We recommend using [Age Encrypted Secrets](AgeSecrets.md) for offline, in-repository secret management.
+# Infisical Secrets Manager Setup
 
 Set up Infisical as the secrets provider for ComposeFlux.
 
@@ -98,7 +94,7 @@ Make sure you have the following values for ComposeFlux:
 Add to your `.env` or compose file:
 
 ```bash
-SECRETS_PROVIDER=infisical
+REMOTE_SECRETS_PROVIDER=infisical
 INFISICAL_CLIENT_ID=<your-client-id>
 INFISICAL_CLIENT_SECRET=<your-client-secret>
 INFISICAL_ENVIRONMENT=prod

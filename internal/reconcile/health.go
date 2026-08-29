@@ -9,6 +9,7 @@ import (
 
 const maxHealthReconcileAttempts = 3
 
+// ReconcileHealth redeploys unhealthy managed stacks up to the retry limit.
 func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
@@ -32,8 +33,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 			return err
 		}
 
-		// Load shared secrets (external secrets manager + root *.age files)
-		sharedAgeEnvs, _, err := r.loadSharedSecrets()
+		sharedSecrets, _, err := r.loadSharedSecrets()
 		if err != nil {
 			slog.Warn("Failed to load shared secrets for health reconcile", "error", err)
 		}
@@ -53,21 +53,21 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 				continue
 			}
 
-			composeCfg, err := r.buildComposeConfig(stackPath, globalEnvs)
+			composeCfg, err := buildComposeConfig(stackPath, globalEnvs)
 			if err != nil {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", stackName, "error", err)
 				continue
 			}
 
-			project, _, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedAgeEnvs)
+			loaded, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedSecrets)
 			if err != nil {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 				continue
 			}
 
-			if err := r.Deploy(ctx, project); err != nil {
+			if err := r.Deploy(ctx, loaded.project); err != nil {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Failed to deploy the stack", "stack_name", stackName,
 					"attempt", r.healthFailCounts[stackName], "error", err)

@@ -1,8 +1,6 @@
-package secretsmanager
+package remotesecrets
 
-import (
-	"github.com/bitwarden/sdk-go/v2"
-)
+import "github.com/bitwarden/sdk-go/v2"
 
 type BitwardenConfig struct {
 	ApiURL      string `name:"api-url" help:"API URL" env:"API_URL" default:"https://vault.bitwarden.com/api"`
@@ -20,23 +18,17 @@ type bitwardenClient struct {
 }
 
 // FetchAll retrieves all secrets.
-func (c *bitwardenClient) FetchAll() ([]Secret, error) {
+func (c *bitwardenClient) FetchAll() (map[string]*string, error) {
 	resp, err := c.bwClient.Secrets().Sync(c.organizationID, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert to our Secret format
-	var secrets []Secret
-	for _, bwSecret := range resp.Secrets {
-		// Filter secrets by project ID
-		// Note: Sync() already returns only secrets the access token has permission to access,
-		// but we filter by project ID to ensure we only sync secrets from the specified project
-		if bwSecret.ProjectID != nil && *bwSecret.ProjectID == c.projectID {
-			secrets = append(secrets, Secret{
-				Key:   bwSecret.Key,
-				Value: bwSecret.Value,
-			})
+	secrets := make(map[string]*string)
+	for _, secret := range resp.Secrets {
+		if secret.ProjectID != nil && *secret.ProjectID == c.projectID {
+			value := secret.Value
+			secrets[secret.Key] = &value
 		}
 	}
 
@@ -52,11 +44,12 @@ func (c *bitwardenClient) Get(id string) (string, error) {
 	return secret.Value, nil
 }
 
-// Close cleans up resources
+// Close cleans up resources.
 func (c *bitwardenClient) Close() {
 	c.bwClient.Close()
 }
 
+// NewBitwardenClient authenticates and returns a Bitwarden secrets client.
 func NewBitwardenClient(cfg BitwardenConfig) (Client, error) {
 	apiEndpoint := cfg.ApiURL
 	identityEndpoint := cfg.IdentityURL
@@ -66,8 +59,8 @@ func NewBitwardenClient(cfg BitwardenConfig) (Client, error) {
 		return nil, err
 	}
 
-	err = bwClient.AccessTokenLogin(cfg.AccessToken, nil)
-	if err != nil {
+	if err := bwClient.AccessTokenLogin(cfg.AccessToken, nil); err != nil {
+		bwClient.Close()
 		return nil, err
 	}
 

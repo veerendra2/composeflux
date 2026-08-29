@@ -9,6 +9,7 @@ import (
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
+// PruneResources removes unused Docker resources when every source stack is healthy.
 func (r *Reconciler) PruneResources(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
@@ -18,7 +19,7 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 		return err
 	}
 
-	srcStacks, err := r.discoverComposeStack(globalEnvs)
+	srcStacks, err := r.discoverComposeStacks(globalEnvs)
 	if err != nil {
 		return err
 	}

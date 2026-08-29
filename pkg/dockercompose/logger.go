@@ -20,6 +20,7 @@ type slogWriter struct {
 	logHook *slogHook
 }
 
+// Write buffers Docker output until complete lines can be forwarded to slog.
 func (w *slogWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -66,20 +67,24 @@ type slogHook struct {
 	stackName string
 }
 
+// setStackName sets the stack attribute attached to forwarded Docker logs.
 func (h *slogHook) setStackName(name string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.stackName = name
 }
 
+// getStackName safely returns the current Docker log stack attribute.
 func (h *slogHook) getStackName() string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.stackName
 }
 
+// Levels enables forwarding for every logrus level emitted by the Docker SDK.
 func (h *slogHook) Levels() []logrus.Level { return logrus.AllLevels }
 
+// Fire translates a logrus entry into the corresponding structured slog record.
 func (h *slogHook) Fire(entry *logrus.Entry) error {
 	level := slog.LevelInfo
 	if entry.Level <= logrus.ErrorLevel {

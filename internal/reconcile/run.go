@@ -9,6 +9,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// Run schedules Git, health, image-update, and prune reconciliation until cancellation.
 func (r *Reconciler) Run(ctx context.Context) {
 	// Sync from Git during bootstrap
 	if err := r.GitSync(ctx, false); err != nil {

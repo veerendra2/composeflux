@@ -17,53 +17,52 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 		return err
 	}
 
-	composeCfgs, err := r.discoverComposeStack(globalEnvs)
+	composeCfgs, err := r.discoverComposeStacks(globalEnvs)
 	if err != nil {
 		slog.Error("Failed to discover compose stacks for image update check", "error", err)
 		return err
 	}
 
-	// Load shared secrets (external secrets manager + root *.age files)
-	sharedAgeEnvs, _, err := r.loadSharedSecrets()
+	sharedSecrets, _, err := r.loadSharedSecrets()
 	if err != nil {
 		slog.Warn("Failed to load shared secrets for image updates", "error", err)
 	}
 
 	for _, composeCfg := range composeCfgs {
-		project, _, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedAgeEnvs)
+		loaded, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedSecrets)
 		if err != nil {
 			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
-		if hasImageUpdateExcludeLabel(project) {
-			slog.Info("Stack has image update excluded, skipping", "stack_name", project.Name)
+		if hasImageUpdateExcludeLabel(loaded.project) {
+			slog.Info("Stack has image update excluded, skipping", "stack_name", loaded.project.Name)
 			continue
 		}
 
-		hasUpdate, err := r.dClient.HasImageUpdates(ctx, project)
+		hasUpdate, err := r.dClient.HasImageUpdates(ctx, loaded.project)
 		if err != nil {
-			slog.Warn("Failed to check image updates", "stack_name", project.Name, "error", err)
+			slog.Warn("Failed to check image updates", "stack_name", loaded.project.Name, "error", err)
 			continue
 		}
 
 		if !hasUpdate {
-			slog.Debug("All images up to date", "stack_name", project.Name)
+			slog.Debug("All images up to date", "stack_name", loaded.project.Name)
 			continue
 		}
 
-		if err := r.dClient.Pull(ctx, project); err != nil {
-			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", project.Name, "error", err)
+		if err := r.dClient.Pull(ctx, loaded.project); err != nil {
+			slog.Warn("Failed to pull updated images, skipping redeploy", "stack_name", loaded.project.Name, "error", err)
 			continue
 		}
 
-		if err := r.Deploy(ctx, project); err != nil {
-			slog.Warn("Failed to redeploy stack after image update", "stack_name", project.Name, "error", err)
+		if err := r.Deploy(ctx, loaded.project); err != nil {
+			slog.Warn("Failed to redeploy stack after image update", "stack_name", loaded.project.Name, "error", err)
 			continue
 		}
 
-		r.healthFailCounts[project.Name] = 0
-		slog.Info("Stack redeployed after image update", "stack_name", project.Name)
+		r.healthFailCounts[loaded.project.Name] = 0
+		slog.Info("Stack redeployed after image update", "stack_name", loaded.project.Name)
 	}
 
 	return nil

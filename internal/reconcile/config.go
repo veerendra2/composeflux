@@ -14,6 +14,7 @@ type StackConfig struct {
 	Envs         map[string]string `yaml:"envs"`
 }
 
+// Load reads and parses a stack configuration file.
 func Load(path string) (*StackConfig, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
