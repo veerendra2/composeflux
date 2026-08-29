@@ -9,13 +9,34 @@ import (
 	infisical "github.com/infisical/go-sdk"
 )
 
+const (
+	defaultInfisicalSiteURL    = "https://app.infisical.com"
+	defaultInfisicalSecretPath = "/"
+)
+
 type InfisicalConfig struct {
 	SiteUrl      string `name:"site-url" help:"Site URL" env:"SITE_URL" default:"https://app.infisical.com"`
-	ClientID     string `name:"client-id" help:"Client ID (Universal Auth)" env:"CLIENT_ID"`
-	ClientSecret string `name:"client-secret" help:"Client Secret (Universal Auth)" env:"CLIENT_SECRET"`
-	Environment  string `name:"environment" help:"Environment slug" env:"ENVIRONMENT"`
-	ProjectID    string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
+	ClientID     string `name:"client-id" help:"Client ID (Universal Auth)" env:"CLIENT_ID" and:"infisical" xor:"remote-provider"`
+	ClientSecret string `name:"client-secret" help:"Client Secret (Universal Auth)" env:"CLIENT_SECRET" and:"infisical"`
+	Environment  string `name:"environment" help:"Environment slug" env:"ENVIRONMENT" and:"infisical"`
+	ProjectID    string `name:"project-id" help:"Project ID" env:"PROJECT_ID" and:"infisical"`
 	SecretPath   string `name:"secret-path" help:"Secret path (comma-separated for multiple paths)" env:"SECRET_PATH" default:"/"`
+}
+
+// configured reports whether any Infisical-specific configuration was supplied.
+func (c InfisicalConfig) configured() bool {
+	return c.ClientID != "" || c.ClientSecret != "" || c.Environment != "" || c.ProjectID != "" ||
+		(c.SiteUrl != "" && c.SiteUrl != defaultInfisicalSiteURL) ||
+		(c.SecretPath != "" && c.SecretPath != defaultInfisicalSecretPath)
+}
+
+// validate checks that all required Infisical credentials are configured.
+func (c InfisicalConfig) validate() error {
+	if c.ClientID == "" || c.ClientSecret == "" || c.Environment == "" || c.ProjectID == "" {
+		return fmt.Errorf("infisical provider requires: --infisical-client-id, " +
+			"--infisical-client-secret, --infisical-environment, --infisical-project-id")
+	}
+	return nil
 }
 
 type infisicalClient struct {
@@ -80,6 +101,12 @@ func (c *infisicalClient) Close() {
 
 // NewInfisicalClient authenticates and returns a client for the configured secret paths.
 func NewInfisicalClient(ctx context.Context, cfg InfisicalConfig) (Client, error) {
+	if cfg.SiteUrl == "" {
+		cfg.SiteUrl = defaultInfisicalSiteURL
+	}
+	if cfg.SecretPath == "" {
+		cfg.SecretPath = defaultInfisicalSecretPath
+	}
 	autoTokenRefresh := true
 	client := infisical.NewInfisicalClient(ctx, infisical.Config{
 		SiteUrl:          cfg.SiteUrl,

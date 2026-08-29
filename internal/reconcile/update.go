@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/compose-spec/compose-go/v2/types"
@@ -12,25 +13,32 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	globalEnvs, _, err := r.loadStackConfig()
+	repoPath, stackRoot, err := r.sourceRoots()
+	if err != nil {
+		return err
+	}
+	globalEnvs, _, err := r.loadStackConfig(stackRoot)
 	if err != nil {
 		return err
 	}
 
-	composeCfgs, err := r.discoverComposeStacks(globalEnvs)
+	composeCfgs, err := discoverComposeStacks(stackRoot, globalEnvs)
 	if err != nil {
 		slog.Error("Failed to discover compose stacks for image update check", "error", err)
 		return err
 	}
 
-	sharedSecrets, _, err := r.loadSharedSecrets()
+	sharedSecrets, _, err := r.loadSharedSecrets(stackRoot)
 	if err != nil {
-		slog.Warn("Failed to load shared secrets for image updates", "error", err)
+		return err
 	}
 
 	for _, composeCfg := range composeCfgs {
-		loaded, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedSecrets)
+		loaded, err := r.loadProjectWithSecrets(ctx, repoPath, composeCfg, sharedSecrets)
 		if err != nil {
+			if errors.Is(err, errLocalSecrets) {
+				return err
+			}
 			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}

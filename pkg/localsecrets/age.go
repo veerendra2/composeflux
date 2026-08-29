@@ -14,6 +14,15 @@ import (
 	"github.com/compose-spec/compose-go/v2/dotenv"
 )
 
+type AgeConfig struct {
+	Passphrase string `name:"passphrase" help:"Passphrase for age-encrypted secret files" env:"PASSPHRASE" xor:"local-provider"`
+}
+
+// configured reports whether Age local secrets are enabled.
+func (c AgeConfig) configured() bool {
+	return c.Passphrase != ""
+}
+
 type ageClient struct {
 	passphrase string
 	identity   *age.ScryptIdentity
@@ -34,10 +43,19 @@ func (c *ageClient) Decrypt(dir string) (map[string]*string, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = root.Close() }()
 
 	result := make(map[string]*string)
 	for _, file := range files {
-		envs, err := c.decryptEnvFile(file)
+		data, err := root.ReadFile(filepath.Base(file))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to read age file %s: %w", file, err)
+		}
+		envs, err := c.decryptEnvFile(file, data)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -45,6 +63,11 @@ func (c *ageClient) Decrypt(dir string) (map[string]*string, []string, error) {
 	}
 
 	return result, files, nil
+}
+
+// IsSecretFile reports whether path is an Age-encrypted secret file.
+func (*ageClient) IsSecretFile(path string) bool {
+	return filepath.Ext(path) == ".age"
 }
 
 // findFiles returns all *.age files located directly in dir, sorted by filename.
@@ -60,6 +83,9 @@ func findFiles(dir string) ([]string, error) {
 			continue
 		}
 		if filepath.Ext(entry.Name()) == ".age" {
+			if entry.Type()&os.ModeSymlink != 0 {
+				return nil, fmt.Errorf("age secret file must not be a symbolic link: %s", filepath.Join(dir, entry.Name()))
+			}
 			files = append(files, filepath.Join(dir, entry.Name()))
 		}
 	}
@@ -68,15 +94,10 @@ func findFiles(dir string) ([]string, error) {
 	return files, nil
 }
 
-// decryptEnvFile decrypts an age-encrypted dotenv file in binary or armored format.
-func (c *ageClient) decryptEnvFile(filePath string) (map[string]*string, error) {
+// decryptEnvFile decrypts age-encrypted dotenv data in binary or armored format.
+func (c *ageClient) decryptEnvFile(filePath string, data []byte) (map[string]*string, error) {
 	if c.passphrase == "" {
 		return nil, fmt.Errorf("cannot decrypt %s: age passphrase is not set (use --age-passphrase or AGE_PASSPHRASE)", filePath)
-	}
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read age file %s: %w", filePath, err)
 	}
 
 	var inReader io.Reader = bytes.NewReader(data)
@@ -86,6 +107,7 @@ func (c *ageClient) decryptEnvFile(filePath string) (map[string]*string, error) 
 
 	identity := c.identity
 	if identity == nil {
+		var err error
 		identity, err = age.NewScryptIdentity(c.passphrase)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)

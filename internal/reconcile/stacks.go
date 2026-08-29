@@ -40,9 +40,8 @@ func buildComposeConfig(dir string, env []string) (dockercompose.ComposeConfig, 
 	return dockercompose.ComposeConfig{ComposeFiles: composeFiles, WorkingDir: dir, Env: env}, nil
 }
 
-// discoverComposeStacks builds configurations for valid stack directories in the repository.
-func (r *Reconciler) discoverComposeStacks(env []string) ([]dockercompose.ComposeConfig, error) {
-	stackRoot := filepath.Join(r.gClient.Path(), r.stackPath)
+// discoverComposeStacks builds configurations for valid stack directories beneath stackRoot.
+func discoverComposeStacks(stackRoot string, env []string) ([]dockercompose.ComposeConfig, error) {
 	entries, err := os.ReadDir(stackRoot)
 	if err != nil {
 		return nil, err

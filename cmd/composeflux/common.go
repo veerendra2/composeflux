@@ -12,9 +12,9 @@ import (
 
 	"github.com/veerendra2/composeflux/internal/reconcile"
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
+	"github.com/veerendra2/composeflux/pkg/gitrepo"
 	"github.com/veerendra2/composeflux/pkg/localsecrets"
 	"github.com/veerendra2/composeflux/pkg/remotesecrets"
-	"github.com/veerendra2/composeflux/pkg/source"
 	"github.com/veerendra2/gopackages/version"
 )
 
@@ -22,37 +22,32 @@ type CommonConfig struct {
 	RemoteSecrets remotesecrets.Config `embed:""`
 	LocalSecrets  localsecrets.Config  `embed:""`
 	Reconciler    reconcile.Config     `embed:"" group:"Reconciler Options:"`
-	Source        source.Config        `embed:"" group:"Git Source Options:"`
+	Source        gitrepo.Config       `embed:"" group:"Git Source Options:"`
 	DockerCompose dockercompose.Config `embed:"" group:"Docker Compose Options:"`
 }
 
 // Validate checks provider-specific configuration
 func (c *CommonConfig) Validate() error {
-	switch c.RemoteSecrets.Provider {
-	case "":
-		if c.Source.DeployKeySecretRef != "" {
-			return fmt.Errorf("--deploy-key-secret-ref requires a remote secrets provider (--remote-secrets-provider)")
-		}
-	case "bitwarden":
-		if c.RemoteSecrets.Bitwarden.AccessToken == "" || c.RemoteSecrets.Bitwarden.OrgID == "" || c.RemoteSecrets.Bitwarden.ProjectID == "" {
-			return fmt.Errorf("bitwarden provider requires: --bitwarden-access-token, " +
-				"--bitwarden-organization-id, --bitwarden-project-id")
-		}
-	case "infisical":
-		if c.RemoteSecrets.Infisical.ClientID == "" || c.RemoteSecrets.Infisical.ClientSecret == "" ||
-			c.RemoteSecrets.Infisical.Environment == "" || c.RemoteSecrets.Infisical.ProjectID == "" {
-			return fmt.Errorf("infisical provider requires: --infisical-client-id, " +
-				"--infisical-client-secret, --infisical-environment, --infisical-project-id")
-		}
+	if c.Source.DeployKeySecretRef != "" && !c.RemoteSecrets.Configured() {
+		return fmt.Errorf("--deploy-key-secret-ref requires Bitwarden or Infisical credentials")
 	}
 	return nil
 }
 
 // InitClients initializes all required clients (secrets, git, docker, reconciler)
 func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, func(), error) {
+	remoteProvider, err := c.RemoteSecrets.Provider()
+	if err != nil {
+		return nil, nil, err
+	}
+	localProvider, err := c.LocalSecrets.Provider()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	rClient, err := remotesecrets.New(ctx, c.RemoteSecrets)
 	if err != nil {
-		slog.Error("Failed to create remote secrets client", "provider", c.RemoteSecrets.Provider, "error", err)
+		slog.Error("Failed to create remote secrets client", "provider", remoteProvider, "error", err)
 		return nil, nil, err
 	}
 
@@ -62,6 +57,11 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 		}
 	}
 
+	lClient, err := localsecrets.New(c.LocalSecrets)
+	if err != nil {
+		return nil, cleanup, err
+	}
+
 	if c.Source.DeployKeySecretRef != "" {
 		if err := c.writeDeployKey(rClient); err != nil {
 			return nil, cleanup, err
@@ -69,7 +69,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 
 	// Create git client
-	gClient, err := source.New(c.Source)
+	gClient, err := gitrepo.New(c.Source)
 	if err != nil {
 		slog.Error("Failed to create git client", "error", err)
 		return nil, cleanup, err
@@ -93,8 +93,6 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 	slog.Info("Docker version", dockerVersion...)
 
-	lClient := localsecrets.New(c.LocalSecrets)
-
 	// Create reconciler
 	reconciler, err := reconcile.New(c.Reconciler, lClient, rClient, gClient, dClient)
 	if err != nil {
@@ -103,7 +101,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	}
 
 	slog.Info("Reconciler configured", "stack_path", c.Reconciler.StackPath, "config_file", c.Reconciler.ConfigFile,
-		"remote_secrets_provider", c.RemoteSecrets.Provider, "git_poll_interval", c.Reconciler.GitInterval,
+		"remote_secrets_provider", remoteProvider, "local_secrets_provider", localProvider, "git_poll_interval", c.Reconciler.GitInterval,
 		"health_reconcile_interval", c.Reconciler.HealthInterval, "prune_interval", c.Reconciler.PruneInterval,
 		"image_update_cron", c.Reconciler.ImageUpdateSchedule)
 
@@ -113,7 +111,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 // writeDeployKey fetches the configured SSH key and writes it with restricted permissions.
 func (c *CommonConfig) writeDeployKey(client remotesecrets.Client) error {
 	if client == nil {
-		return fmt.Errorf("--deploy-key-secret-ref requires a remote secrets provider (--remote-secrets-provider)")
+		return fmt.Errorf("--deploy-key-secret-ref requires Bitwarden or Infisical credentials")
 	}
 
 	ref := c.Source.DeployKeySecretRef

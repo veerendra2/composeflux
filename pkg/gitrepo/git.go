@@ -1,4 +1,4 @@
-package source
+package gitrepo
 
 import (
 	"context"

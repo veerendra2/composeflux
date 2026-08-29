@@ -1,7 +1,6 @@
 package reconcile
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,17 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/compose-spec/compose-go/v2/dotenv"
-	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
 )
-
-type composeSources struct {
-	composeFiles  []string
-	extendsFiles  []string
-	envFiles      []string
-	optionalFiles map[string]struct{}
-}
 
 type dependencyPaths struct {
 	filePaths     []string
@@ -36,6 +26,7 @@ type stackDependencies struct {
 	buildContexts   []string
 	dockerfiles     map[string]struct{}
 	localSecretDirs map[string]struct{}
+	isLocalSecret   func(string) bool
 }
 
 type changeImpact struct {
@@ -43,291 +34,37 @@ type changeImpact struct {
 	build  bool
 }
 
-type composeSourceWalker struct {
-	root        string
-	seen        map[string]struct{}
-	composeSeen map[string]struct{}
-	extendsSeen map[string]struct{}
-	envSeen     map[string]struct{}
-	sources     composeSources
-}
-
 // resolvePathWithinRoot resolves symlinks and rejects paths outside root.
 func resolvePathWithinRoot(root, path string) (string, error) {
+	_, resolved, err := resolvePathsWithinRoot(root, path)
+	return resolved, err
+}
+
+// resolvePathsWithinRoot returns Git-visible and canonical paths confined to root.
+func resolvePathsWithinRoot(root, path string) (string, string, error) {
 	root, err := filepath.Abs(filepath.Clean(root))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	root, err = filepath.EvalSymlinks(root)
+	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	path, err = filepath.Abs(filepath.Clean(path))
 	if err != nil {
-		return "", err
-	}
-	path, err = filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if !pathWithinRoot(root, path) {
-		return "", fmt.Errorf("path %s resolves outside repository %s", path, root)
+		return "", "", fmt.Errorf("path %s is outside repository %s", path, root)
 	}
-	return path, nil
-}
-
-// collectComposeSources discovers repository-local include, extends, and environment sources.
-func collectComposeSources(ctx context.Context, root string, composeFiles []string, workingDir string, environment types.Mapping) (composeSources, error) {
-	root, err := resolvePathWithinRoot(root, root)
+	resolvedPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return composeSources{}, err
+		return "", "", err
 	}
-	workingDir, err = resolvePathWithinRoot(root, workingDir)
-	if err != nil {
-		return composeSources{}, err
+	if !pathWithinRoot(resolvedRoot, resolvedPath) {
+		return "", "", fmt.Errorf("path %s resolves outside repository %s", path, resolvedRoot)
 	}
-
-	walker := composeSourceWalker{
-		root:        root,
-		seen:        make(map[string]struct{}),
-		composeSeen: make(map[string]struct{}),
-		extendsSeen: make(map[string]struct{}),
-		envSeen:     make(map[string]struct{}),
-		sources: composeSources{
-			optionalFiles: make(map[string]struct{}),
-		},
-	}
-	if err := walker.walk(ctx, composeFiles, workingDir, environment); err != nil {
-		return composeSources{}, err
-	}
-	return walker.sources, nil
-}
-
-// walk loads one Compose file group and recursively follows its include and extends declarations.
-func (w *composeSourceWalker) walk(ctx context.Context, composeFiles []string, workingDir string, environment types.Mapping) error {
-	resolvedFiles := make([]string, 0, len(composeFiles))
-	for _, composeFile := range composeFiles {
-		if !filepath.IsAbs(composeFile) {
-			composeFile = filepath.Join(workingDir, composeFile)
-		}
-		resolved, err := resolvePathWithinRoot(w.root, composeFile)
-		if err != nil {
-			return fmt.Errorf("invalid compose file path: %w", err)
-		}
-		resolvedFiles = append(resolvedFiles, resolved)
-		if _, ok := w.composeSeen[resolved]; !ok {
-			w.composeSeen[resolved] = struct{}{}
-			w.sources.composeFiles = append(w.sources.composeFiles, resolved)
-		}
-	}
-
-	key := sourceWalkKey(resolvedFiles, workingDir, environment)
-	if _, ok := w.seen[key]; ok {
-		return nil
-	}
-	w.seen[key] = struct{}{}
-
-	model, err := loader.LoadModelWithContext(ctx, types.ConfigDetails{
-		WorkingDir:  workingDir,
-		ConfigFiles: types.ToConfigFiles(resolvedFiles),
-		Environment: environment,
-	}, func(options *loader.Options) {
-		options.SkipInclude = true
-		options.SkipExtends = true
-	})
-	if err != nil {
-		return fmt.Errorf("failed to load compose sources: %w", err)
-	}
-
-	includes, err := parseComposeIncludes(model["include"])
-	if err != nil {
-		return err
-	}
-
-	for _, include := range includes {
-		includeFiles := make([]string, 0, len(include.Path))
-		for _, path := range include.Path {
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(workingDir, path)
-			}
-			resolved, err := resolvePathWithinRoot(w.root, path)
-			if err != nil {
-				return fmt.Errorf("invalid included compose file path: %w", err)
-			}
-			includeFiles = append(includeFiles, resolved)
-		}
-		if len(includeFiles) == 0 {
-			continue
-		}
-
-		includeDir := include.ProjectDirectory
-		if includeDir == "" {
-			includeDir = filepath.Dir(includeFiles[0])
-		} else if !filepath.IsAbs(includeDir) {
-			includeDir = filepath.Join(workingDir, includeDir)
-		}
-		includeDir, err = resolvePathWithinRoot(w.root, includeDir)
-		if err != nil {
-			return fmt.Errorf("invalid include project directory: %w", err)
-		}
-
-		envFiles, err := w.includeEnvFiles(include.EnvFile, workingDir, includeDir)
-		if err != nil {
-			return err
-		}
-		envFromFile, err := dotenv.GetEnvFromFile(environment, envFiles)
-		if err != nil {
-			return fmt.Errorf("failed to load include environment: %w", err)
-		}
-		if err := w.walk(ctx, includeFiles, includeDir, environment.Clone().Merge(envFromFile)); err != nil {
-			return err
-		}
-	}
-	if err := w.walkExtends(ctx, model, workingDir, environment); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// walkExtends records and recursively loads external files referenced by service extends.
-func (w *composeSourceWalker) walkExtends(ctx context.Context, model map[string]any, workingDir string, environment types.Mapping) error {
-	files, err := composeExtendsFiles(model)
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		if !filepath.IsAbs(file) {
-			file = filepath.Join(workingDir, file)
-		}
-		file, err = resolvePathWithinRoot(w.root, file)
-		if err != nil {
-			return fmt.Errorf("invalid extends compose file path: %w", err)
-		}
-		if _, seen := w.extendsSeen[file]; !seen {
-			w.extendsSeen[file] = struct{}{}
-			w.sources.extendsFiles = append(w.sources.extendsFiles, file)
-		}
-
-		extendsDir := filepath.Dir(file)
-		key := "extends\x00" + sourceWalkKey([]string{file}, extendsDir, environment)
-		if _, seen := w.seen[key]; seen {
-			continue
-		}
-		w.seen[key] = struct{}{}
-		extendsModel, err := loader.LoadModelWithContext(ctx, types.ConfigDetails{
-			WorkingDir:  extendsDir,
-			ConfigFiles: types.ToConfigFiles([]string{file}),
-			Environment: environment,
-		}, func(options *loader.Options) {
-			options.SkipInclude = true
-			options.SkipExtends = true
-		})
-		if err != nil {
-			return fmt.Errorf("failed to load extends compose source %s: %w", file, err)
-		}
-		if err := w.walkExtends(ctx, extendsModel, extendsDir, environment); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// composeExtendsFiles extracts external extends file paths from an SDK-loaded model.
-func composeExtendsFiles(model map[string]any) ([]string, error) {
-	services, ok := model["services"].(map[string]any)
-	if !ok {
-		return nil, nil
-	}
-	var files []string
-	for name, value := range services {
-		var service types.ServiceConfig
-		if err := loader.Transform(value, &service); err != nil {
-			return nil, fmt.Errorf("failed to parse service %s extends: %w", name, err)
-		}
-		if service.Extends != nil && service.Extends.File != "" {
-			files = append(files, service.Extends.File)
-		}
-	}
-	return files, nil
-}
-
-// parseComposeIncludes converts normalized include data into Compose include configurations.
-func parseComposeIncludes(value any) ([]types.IncludeConfig, error) {
-	if value == nil {
-		return nil, nil
-	}
-	configs, ok := value.([]any)
-	if !ok {
-		return nil, fmt.Errorf("include must be a list")
-	}
-	for i, config := range configs {
-		if path, ok := config.(string); ok {
-			configs[i] = map[string]any{"path": path}
-		}
-	}
-	var includes []types.IncludeConfig
-	if err := loader.Transform(configs, &includes); err != nil {
-		return nil, fmt.Errorf("failed to parse compose includes: %w", err)
-	}
-	return includes, nil
-}
-
-// includeEnvFiles resolves include environment files and tracks the optional default .env path.
-func (w *composeSourceWalker) includeEnvFiles(envFiles types.StringList, workingDir, includeDir string) ([]string, error) {
-	if len(envFiles) == 0 {
-		defaultEnvFile := filepath.Join(includeDir, ".env")
-		if info, err := os.Stat(defaultEnvFile); err == nil && !info.IsDir() {
-			resolved, err := resolvePathWithinRoot(w.root, defaultEnvFile)
-			if err != nil {
-				return nil, fmt.Errorf("invalid include environment file path: %w", err)
-			}
-			w.addEnvFile(resolved)
-			w.sources.optionalFiles[resolved] = struct{}{}
-			return []string{resolved}, nil
-		}
-		w.addEnvFile(defaultEnvFile)
-		w.sources.optionalFiles[defaultEnvFile] = struct{}{}
-		return nil, nil
-	}
-
-	resolvedFiles := make([]string, 0, len(envFiles))
-	for _, envFile := range envFiles {
-		if envFile == "/dev/null" {
-			continue
-		}
-		if !filepath.IsAbs(envFile) {
-			envFile = filepath.Join(workingDir, envFile)
-		}
-		resolved, err := resolvePathWithinRoot(w.root, envFile)
-		if err != nil {
-			return nil, fmt.Errorf("invalid include environment file path: %w", err)
-		}
-		resolvedFiles = append(resolvedFiles, resolved)
-		w.addEnvFile(resolved)
-	}
-	return resolvedFiles, nil
-}
-
-// addEnvFile records an environment source once while preserving discovery order.
-func (w *composeSourceWalker) addEnvFile(path string) {
-	if _, ok := w.envSeen[path]; ok {
-		return
-	}
-	w.envSeen[path] = struct{}{}
-	w.sources.envFiles = append(w.sources.envFiles, path)
-}
-
-// sourceWalkKey identifies a source load by files, working directory, and effective environment.
-func sourceWalkKey(composeFiles []string, workingDir string, environment types.Mapping) string {
-	keys := slices.Sorted(maps.Keys(environment))
-	parts := make([]string, 0, len(composeFiles)+len(keys)+1)
-	parts = append(parts, workingDir)
-	parts = append(parts, composeFiles...)
-	for _, key := range keys {
-		parts = append(parts, key+"="+environment[key])
-	}
-	return strings.Join(parts, "\x00")
+	return path, resolvedPath, nil
 }
 
 // projectDependencyPaths extracts file, bind, and build-context references from a loaded project.
@@ -340,14 +77,16 @@ func projectDependencyPaths(project *types.Project) dependencyPaths {
 	bindPaths := make(map[string]struct{})
 	buildContexts := make(map[string]struct{})
 	optionalFiles := make(map[string]struct{})
-	addPath := func(paths map[string]struct{}, path string) {
+	addPath := func(paths map[string]struct{}, path string) string {
 		if path == "" {
-			return
+			return ""
 		}
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(project.WorkingDir, path)
 		}
-		paths[filepath.Clean(path)] = struct{}{}
+		path = filepath.Clean(path)
+		paths[path] = struct{}{}
+		return path
 	}
 
 	defaultEnvFile := filepath.Join(project.WorkingDir, ".env")
@@ -364,9 +103,9 @@ func projectDependencyPaths(project *types.Project) dependencyPaths {
 	}
 	for _, service := range project.Services {
 		for _, envFile := range service.EnvFiles {
-			addPath(filePaths, envFile.Path)
-			if !envFile.Required {
-				optionalFiles[filepath.Clean(envFile.Path)] = struct{}{}
+			path := addPath(filePaths, envFile.Path)
+			if !envFile.Required && path != "" {
+				optionalFiles[path] = struct{}{}
 			}
 		}
 		for _, volume := range service.Volumes {
@@ -488,7 +227,7 @@ func buildStackDependencies(repoPath string, project *types.Project, extraFiles,
 func (d stackDependencies) impact(changedPaths map[string]struct{}) changeImpact {
 	impact := changeImpact{}
 	for changedPath := range changedPaths {
-		if filepath.Ext(changedPath) == ".age" {
+		if d.isLocalSecret != nil && d.isLocalSecret(changedPath) {
 			secretDir := filepath.Dir(changedPath)
 			if resolvedDir, err := filepath.EvalSymlinks(secretDir); err == nil {
 				secretDir = filepath.Clean(resolvedDir)

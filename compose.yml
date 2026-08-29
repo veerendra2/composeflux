@@ -6,7 +6,6 @@ services:
     container_name: composeflux
     environment:
       # Reconciler Configuration
-      REMOTE_SECRETS_PROVIDER: ${REMOTE_SECRETS_PROVIDER}
       STACK_PATH: ${STACK_PATH}
       # CONFIG_FILE: stack.yml
       # GIT_INTERVAL: 5m

@@ -17,7 +17,7 @@ cmd/playground/         # Dev scratch area
 internal/reconcile/     # Core reconciliation loop, Git sync, health checks, prune logic
 pkg/dockercompose/      # Docker & Compose SDK wrapper
 pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical) — optional
-pkg/source/             # Git client (go-git wrapper)
+pkg/gitrepo/            # Git repository client (go-git wrapper)
 docs/                   # MkDocs documentation
 ```
 

@@ -9,6 +9,7 @@ ComposeFlux natively supports decrypting `*.age` encrypted dotenv files directly
 - Encrypted `.env.age` (or any `*.age`) files are committed directly to your Git repository.
 - Secrets are decrypted in memory using a passphrase (`--age-passphrase` or `AGE_PASSPHRASE`) and made available for Docker Compose interpolation.
 - When `*.age` files are updated in Git, ComposeFlux detects the change and triggers an automatic redeploy.
+- Secret files must be regular files; ComposeFlux rejects symbolic links ending in `*.age`.
 
 ## Secret Hierarchy & Layering
 
@@ -92,6 +93,7 @@ git push
 ## Configuring ComposeFlux
 
 Provide the passphrase to ComposeFlux via the `AGE_PASSPHRASE` environment variable or `--age-passphrase` flag.
+When neither is set, Age secrets are disabled and ComposeFlux does not scan for `*.age` files.
 
 ### Compose Example
 

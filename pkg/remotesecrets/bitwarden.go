@@ -1,13 +1,38 @@
 package remotesecrets
 
-import "github.com/bitwarden/sdk-go/v2"
+import (
+	"fmt"
+
+	"github.com/bitwarden/sdk-go/v2"
+)
+
+const (
+	defaultBitwardenAPIURL      = "https://vault.bitwarden.com/api"
+	defaultBitwardenIdentityURL = "https://vault.bitwarden.com/identity"
+)
 
 type BitwardenConfig struct {
 	ApiURL      string `name:"api-url" help:"API URL" env:"API_URL" default:"https://vault.bitwarden.com/api"`
 	IdentityURL string `name:"identity-url" help:"Identity URL" env:"IDENTITY_URL" default:"https://vault.bitwarden.com/identity"`
-	AccessToken string `name:"access-token" help:"Access token" env:"ACCESS_TOKEN"`
-	OrgID       string `name:"organization-id" help:"Organization ID" env:"ORGANIZATION_ID"`
-	ProjectID   string `name:"project-id" help:"Project ID" env:"PROJECT_ID"`
+	AccessToken string `name:"access-token" help:"Access token" env:"ACCESS_TOKEN" and:"bitwarden" xor:"remote-provider"`
+	OrgID       string `name:"organization-id" help:"Organization ID" env:"ORGANIZATION_ID" and:"bitwarden"`
+	ProjectID   string `name:"project-id" help:"Project ID" env:"PROJECT_ID" and:"bitwarden"`
+}
+
+// configured reports whether any Bitwarden-specific configuration was supplied.
+func (c BitwardenConfig) configured() bool {
+	return c.AccessToken != "" || c.OrgID != "" || c.ProjectID != "" ||
+		(c.ApiURL != "" && c.ApiURL != defaultBitwardenAPIURL) ||
+		(c.IdentityURL != "" && c.IdentityURL != defaultBitwardenIdentityURL)
+}
+
+// validate checks that all required Bitwarden credentials are configured.
+func (c BitwardenConfig) validate() error {
+	if c.AccessToken == "" || c.OrgID == "" || c.ProjectID == "" {
+		return fmt.Errorf("bitwarden provider requires: --bitwarden-access-token, " +
+			"--bitwarden-organization-id, --bitwarden-project-id")
+	}
+	return nil
 }
 
 type bitwardenClient struct {
@@ -52,7 +77,13 @@ func (c *bitwardenClient) Close() {
 // NewBitwardenClient authenticates and returns a Bitwarden secrets client.
 func NewBitwardenClient(cfg BitwardenConfig) (Client, error) {
 	apiEndpoint := cfg.ApiURL
+	if apiEndpoint == "" {
+		apiEndpoint = defaultBitwardenAPIURL
+	}
 	identityEndpoint := cfg.IdentityURL
+	if identityEndpoint == "" {
+		identityEndpoint = defaultBitwardenIdentityURL
+	}
 
 	bwClient, err := sdk.NewBitwardenClient(&apiEndpoint, &identityEndpoint)
 	if err != nil {

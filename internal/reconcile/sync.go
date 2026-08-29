@@ -4,7 +4,6 @@ package reconcile
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,36 +39,36 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	repoPath, err := filepath.Abs(filepath.Clean(r.gClient.Path()))
+	repoPath, stackRoot, err := r.sourceRoots()
 	if err != nil {
 		return err
 	}
 	changedPaths := absolutePaths(repoPath, changedFiles)
 
-	globalEnv, startupOrder, err := r.loadStackConfig()
+	globalEnv, startupOrder, err := r.loadStackConfig(stackRoot)
 	if err != nil {
 		return err
 	}
-	composeCfgs, err := r.discoverComposeStacks(globalEnv)
+	composeCfgs, err := discoverComposeStacks(stackRoot, globalEnv)
 	if err != nil {
 		return err
 	}
-	warnMissingStartupOrder(repoPath, r.stackPath, startupOrder)
+	warnMissingStartupOrder(stackRoot, startupOrder)
 
 	currentStacks, err := r.getStackStates(ctx)
 	if err != nil {
 		return err
 	}
-	sharedSecrets, sharedSecretFiles, err := r.loadSharedSecrets()
+	sharedSecrets, sharedSecretFiles, err := r.loadSharedSecrets(stackRoot)
 	if err != nil {
-		slog.Warn("Failed to load shared secrets", "error", err)
+		return err
 	}
-	sharedSecretDir, err := resolvePathWithinRoot(repoPath, filepath.Join(repoPath, r.stackPath))
-	if err != nil {
-		return fmt.Errorf("invalid shared local secrets directory: %w", err)
+	var sharedSecretDir string
+	if r.lClient != nil {
+		sharedSecretDir = stackRoot
 	}
 
-	toDeploy := r.selectStacks(ctx, composeCfgs, syncState{
+	toDeploy, err := r.selectStacks(ctx, composeCfgs, syncState{
 		repoPath:          repoPath,
 		currentStacks:     currentStacks,
 		changedPaths:      changedPaths,
@@ -78,6 +77,9 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		sharedSecretFiles: sharedSecretFiles,
 		sharedSecretDir:   sharedSecretDir,
 	})
+	if err != nil {
+		return err
+	}
 	r.deployStacks(ctx, toDeploy, deploymentOrder(toDeploy, startupOrder))
 
 	clear(r.healthFailCounts)
@@ -92,20 +94,29 @@ func (r *Reconciler) selectStacks(
 	ctx context.Context,
 	composeCfgs []dockercompose.ComposeConfig,
 	state syncState,
-) map[string]loadedStack {
+) (map[string]loadedStack, error) {
 	selected := make(map[string]loadedStack)
 	for _, composeCfg := range composeCfgs {
-		loaded, err := r.loadProjectWithSecrets(ctx, composeCfg, state.sharedSecrets)
+		loaded, err := r.loadProjectWithSecrets(ctx, state.repoPath, composeCfg, state.sharedSecrets)
 		if err != nil {
+			if errors.Is(err, errLocalSecrets) {
+				return nil, err
+			}
 			slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
-		secretDirs := append(loaded.localSecretDirs, state.sharedSecretDir)
+		secretDirs := append([]string(nil), loaded.localSecretDirs...)
+		if state.sharedSecretDir != "" {
+			secretDirs = append(secretDirs, state.sharedSecretDir)
+		}
 		extraFiles := append(loaded.localSecretFiles, state.sharedSecretFiles...)
+		extraFiles = append(extraFiles, loaded.sources.dependencyFiles...)
 		extraFiles = append(extraFiles, loaded.sources.envFiles...)
-		extraFiles = append(extraFiles, loaded.sources.extendsFiles...)
 		dependencies := buildStackDependencies(state.repoPath, loaded.project, extraFiles, secretDirs, loaded.sources.optionalFiles)
+		if r.lClient != nil {
+			dependencies.isLocalSecret = r.lClient.IsSecretFile
+		}
 
 		stackInfo, exists := state.currentStacks[loaded.project.Name]
 		if exists && stackInfo.Suspend {
@@ -133,7 +144,7 @@ func (r *Reconciler) selectStacks(
 			selected[loaded.project.Name] = loadedStack{project: loaded.project, build: impact.build}
 		}
 	}
-	return selected
+	return selected, nil
 }
 
 // deployStacks builds and deploys selected stacks in the supplied order.
@@ -185,9 +196,13 @@ func absolutePaths(root string, paths []string) map[string]struct{} {
 }
 
 // warnMissingStartupOrder reports configured startup entries without source directories.
-func warnMissingStartupOrder(repoPath, stackPath string, startupOrder []string) {
+func warnMissingStartupOrder(stackRoot string, startupOrder []string) {
 	for _, stackName := range startupOrder {
-		path := filepath.Join(repoPath, stackPath, stackName)
+		path := filepath.Clean(filepath.Join(stackRoot, stackName))
+		if !pathWithinRoot(stackRoot, path) {
+			slog.Warn("Stack directory in startup_order is outside stack root", "startup_order_item", stackName)
+			continue
+		}
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			slog.Warn("Stack directory in startup_order not found", "startup_order_item", stackName, "expected_path", path)
 		}

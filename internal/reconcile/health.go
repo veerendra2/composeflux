@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -28,14 +29,18 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	}
 
 	if len(toReconcile) > 0 {
-		globalEnvs, _, err := r.loadStackConfig()
+		repoPath, stackRoot, err := r.sourceRoots()
+		if err != nil {
+			return err
+		}
+		globalEnvs, _, err := r.loadStackConfig(stackRoot)
 		if err != nil {
 			return err
 		}
 
-		sharedSecrets, _, err := r.loadSharedSecrets()
+		sharedSecrets, _, err := r.loadSharedSecrets(stackRoot)
 		if err != nil {
-			slog.Warn("Failed to load shared secrets for health reconcile", "error", err)
+			return err
 		}
 
 		for _, stackName := range toReconcile {
@@ -45,11 +50,22 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 				continue
 			}
 
-			stackPath := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+			stackPath := filepath.Clean(filepath.Join(stackRoot, stackName))
+			if !pathWithinRoot(stackRoot, stackPath) {
+				r.healthFailCounts[stackName]++
+				slog.Warn("Stack path is outside the configured stack root", "stack_name", stackName, "stack_path", stackPath)
+				continue
+			}
 			stat, err := os.Stat(stackPath)
 			if err != nil || !stat.IsDir() {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Stack path not found or not a directory", "stack_name", stackName, "stack_path", stackPath, "error", err)
+				continue
+			}
+			stackPath, err = resolvePathWithinRoot(stackRoot, stackPath)
+			if err != nil {
+				r.healthFailCounts[stackName]++
+				slog.Warn("Stack path resolves outside the configured stack root", "stack_name", stackName, "stack_path", stackPath, "error", err)
 				continue
 			}
 
@@ -60,8 +76,11 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 				continue
 			}
 
-			loaded, err := r.loadProjectWithSecrets(ctx, composeCfg, sharedSecrets)
+			loaded, err := r.loadProjectWithSecrets(ctx, repoPath, composeCfg, sharedSecrets)
 			if err != nil {
+				if errors.Is(err, errLocalSecrets) {
+					return err
+				}
 				r.healthFailCounts[stackName]++
 				slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 				continue

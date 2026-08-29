@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
+	"github.com/veerendra2/composeflux/pkg/gitrepo"
 	"github.com/veerendra2/composeflux/pkg/localsecrets"
 	"github.com/veerendra2/composeflux/pkg/remotesecrets"
-	"github.com/veerendra2/composeflux/pkg/source"
 )
 
 type Config struct {
@@ -30,7 +30,7 @@ type Reconciler struct {
 
 	lClient localsecrets.Client
 	rClient remotesecrets.Client
-	gClient source.Client
+	gClient gitrepo.Client
 	dClient dockercompose.Client
 
 	reconcileMu      sync.Mutex
@@ -38,7 +38,7 @@ type Reconciler struct {
 }
 
 // New creates a reconciler from its configuration and integration clients.
-func New(cfg Config, lClient localsecrets.Client, rClient remotesecrets.Client, gClient source.Client, dClient dockercompose.Client) (*Reconciler, error) {
+func New(cfg Config, lClient localsecrets.Client, rClient remotesecrets.Client, gClient gitrepo.Client, dClient dockercompose.Client) (*Reconciler, error) {
 	return &Reconciler{
 		configFile: cfg.ConfigFile,
 		stackPath:  cfg.StackPath,

@@ -24,15 +24,16 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | ---------------- | -------------------------------------------------------------------- | ------- |
 | `AGE_PASSPHRASE` | Passphrase used to decrypt `*.age` secret files in Git repositories | `""`    |
 
+When unset, local secrets are disabled and ComposeFlux does not scan for `*.age` files.
+
 See the [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md) for full details on encrypting and layering secrets.
 
 ### Optional - Remote Secrets Provider
 
-| Variable                  | Description                                             |
-| ------------------------- | ------------------------------------------------------- |
-| `REMOTE_SECRETS_PROVIDER` | Remote secrets provider: `bitwarden` or `infisical`     |
+Configure either Bitwarden or Infisical credentials. ComposeFlux selects the provider from the configured credentials.
+Local and remote secrets can be enabled together, but only one provider may be configured in each category.
 
-**Bitwarden (when `REMOTE_SECRETS_PROVIDER=bitwarden`):**
+**Bitwarden:**
 
 | Variable                    | Description                  | Default                                |
 | --------------------------- | ---------------------------- | -------------------------------------- |
@@ -42,7 +43,7 @@ See the [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md) for ful
 | `BITWARDEN_API_URL`         | Bitwarden API URL            | `https://vault.bitwarden.com/api`      |
 | `BITWARDEN_IDENTITY_URL`    | Bitwarden Identity URL       | `https://vault.bitwarden.com/identity` |
 
-**Infisical (when `REMOTE_SECRETS_PROVIDER=infisical`):**
+**Infisical:**
 
 | Variable                  | Description                                                       | Default                     |
 | ------------------------- | ----------------------------------------------------------------- | --------------------------- |
@@ -137,14 +138,12 @@ STACK_PATH=stacks
 AGE_PASSPHRASE=your-secure-passphrase
 
 # Option B: Remote Bitwarden Secrets
-# REMOTE_SECRETS_PROVIDER=bitwarden
 # GIT_DEPLOY_KEY_SECRET_REF=aaaaaaa-bbbbb-bbbb-cccc-ddddd
 # BITWARDEN_ACCESS_TOKEN=your-access-token
 # BITWARDEN_ORGANIZATION_ID=your-org-id
 # BITWARDEN_PROJECT_ID=your-project-id
 
 # Option C: Remote Infisical Secrets
-# REMOTE_SECRETS_PROVIDER=infisical
 # GIT_DEPLOY_KEY_SECRET_REF=SSH_PRIVATE_KEY
 # INFISICAL_CLIENT_ID=your-client-id
 # INFISICAL_CLIENT_SECRET=your-client-secret
@@ -172,14 +171,12 @@ services:
       AGE_PASSPHRASE: ${AGE_PASSPHRASE}
 
       # Remote Secrets - Bitwarden
-      # REMOTE_SECRETS_PROVIDER: ${REMOTE_SECRETS_PROVIDER}
       # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
       # BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
       # BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
       # BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
 
       # Remote Secrets - Infisical
-      # REMOTE_SECRETS_PROVIDER: infisical
       # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
       # INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID}
       # INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET}
@@ -209,8 +206,8 @@ services:
 
 If you prefer to mount your SSH key directly instead of storing it in the secrets manager:
 
-1. Leave `REMOTE_SECRETS_PROVIDER` unset (or omit it entirely)
-2. Mount your SSH key to the container at `GIT_SSH_KEY_PATH` location (default: `/.ssh/composeflux_id_rsa`)
+1. Leave the Bitwarden and Infisical credentials unset
+2. Mount your SSH key to the container at the `GIT_SSH_KEY_PATH` location (default: `/.ssh/composeflux_id_rsa`)
 
 ### Deploy Key Secret Reference
 
@@ -219,7 +216,7 @@ without mounting a local key.
 
 How `GIT_DEPLOY_KEY_SECRET_REF` works:
 
-- Requires `REMOTE_SECRETS_PROVIDER` to be set
+- Requires either complete Bitwarden or Infisical credentials
 - When set to a value (e.g., `SSH_PRIVATE_KEY` or a Bitwarden secret ID), ComposeFlux fetches that secret from your
   secrets manager
 - **Bitwarden**: Uses it as the secret ID to fetch (see
