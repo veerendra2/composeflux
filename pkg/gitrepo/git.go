@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v5/utils/merkletrie"
 )
 
 const (
@@ -25,10 +27,25 @@ type Config struct {
 	Branch             string `name:"branch" help:"Git branch to track" env:"GIT_BRANCH" default:"main" group:"Git Source Options:"`
 }
 
+// ChangeAction describes how a file changed between two Git trees.
+type ChangeAction string
+
+const (
+	ChangeActionCreate ChangeAction = "create"
+	ChangeActionUpdate ChangeAction = "update"
+	ChangeActionDelete ChangeAction = "delete"
+)
+
+// FileChange identifies a changed repository-relative path and its action.
+type FileChange struct {
+	Path   string
+	Action ChangeAction
+}
+
 type Client interface {
-	Pull(ctx context.Context) ([]string, error)
+	Pull(ctx context.Context) ([]FileChange, error)
 	HasUpdates(ctx context.Context) (bool, string, string, error)
-	GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]string, error)
+	GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]FileChange, error)
 	Path() string
 }
 
@@ -39,8 +56,8 @@ type client struct {
 	sshAuth *ssh.PublicKeys
 }
 
-// Pull syncs latest changes from remote and returns a list of changed relative file paths since previous HEAD.
-func (c *client) Pull(ctx context.Context) ([]string, error) {
+// Pull syncs latest changes from remote and returns changed relative file paths since previous HEAD.
+func (c *client) Pull(ctx context.Context) ([]FileChange, error) {
 	// Capture local HEAD before fetch to compute the diff. In daemon mode,
 	// HasUpdates() advances the remote ref but leaves local HEAD at the old
 	// commit, so this correctly diffs old..new. If local HEAD diverged
@@ -59,7 +76,7 @@ func (c *client) Pull(ctx context.Context) ([]string, error) {
 
 	newSHA := remoteRef.Hash().String()
 
-	var changedFiles []string
+	var changedFiles []FileChange
 	if oldSHA != "" && oldSHA != newSHA {
 		changedFiles, err = c.GetChangedFiles(ctx, oldSHA, newSHA)
 		if err != nil {
@@ -79,8 +96,8 @@ func (c *client) Pull(ctx context.Context) ([]string, error) {
 	return changedFiles, nil
 }
 
-// GetChangedFiles compares two commit SHAs and returns relative paths of modified, added, or deleted files.
-func (c *client) GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]string, error) {
+// GetChangedFiles compares two commit SHAs and returns created, updated, or deleted files.
+func (c *client) GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]FileChange, error) {
 	if oldSHA == "" || newSHA == "" || oldSHA == newSHA {
 		return nil, nil
 	}
@@ -110,23 +127,40 @@ func (c *client) GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]
 		return nil, fmt.Errorf("failed to diff trees: %w", err)
 	}
 
-	var filePaths []string
-	pathMap := make(map[string]struct{})
+	changeMap := make(map[string]ChangeAction)
 
 	for _, change := range changes {
-		if change.From.Name != "" {
-			pathMap[change.From.Name] = struct{}{}
+		action, err := change.Action()
+		if err != nil {
+			return nil, fmt.Errorf("failed to classify changed file: %w", err)
 		}
-		if change.To.Name != "" {
-			pathMap[change.To.Name] = struct{}{}
+		switch action {
+		case merkletrie.Insert:
+			changeMap[change.To.Name] = ChangeActionCreate
+		case merkletrie.Delete:
+			changeMap[change.From.Name] = ChangeActionDelete
+		case merkletrie.Modify:
+			if change.From.Name != change.To.Name {
+				changeMap[change.From.Name] = ChangeActionDelete
+				changeMap[change.To.Name] = ChangeActionCreate
+			} else {
+				changeMap[change.To.Name] = ChangeActionUpdate
+			}
 		}
 	}
 
-	for path := range pathMap {
+	filePaths := make([]string, 0, len(changeMap))
+	for path := range changeMap {
 		filePaths = append(filePaths, path)
 	}
+	slices.Sort(filePaths)
 
-	return filePaths, nil
+	fileChanges := make([]FileChange, 0, len(filePaths))
+	for _, path := range filePaths {
+		fileChanges = append(fileChanges, FileChange{Path: path, Action: changeMap[path]})
+	}
+
+	return fileChanges, nil
 }
 
 // HasUpdates checks for remote changes and returns update status with short commit SHAs (for logging)

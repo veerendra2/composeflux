@@ -12,6 +12,7 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
+	"github.com/veerendra2/composeflux/pkg/gitrepo"
 )
 
 type loadedStack struct {
@@ -22,7 +23,7 @@ type loadedStack struct {
 type syncState struct {
 	repoPath          string
 	currentStacks     StackStateMap
-	changedPaths      map[string]struct{}
+	changedPaths      map[string]gitrepo.ChangeAction
 	force             bool
 	sharedSecrets     map[string]*string
 	sharedSecretFiles []string
@@ -43,7 +44,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	changedPaths := absolutePaths(repoPath, changedFiles)
+	changedPaths := absoluteChanges(repoPath, changedFiles)
 
 	globalEnv, startupOrder, err := r.loadStackConfig(stackRoot)
 	if err != nil {
@@ -133,10 +134,24 @@ func (r *Reconciler) selectStacks(
 			slog.Info("Unhealthy stack detected", "stack_name", loaded.project.Name)
 			impact = changeImpact{deploy: true, build: true}
 		case state.force:
+			slog.Debug("Stack selected by force sync", "stack_name", loaded.project.Name)
 			impact = changeImpact{deploy: true, build: true}
 		case len(state.changedPaths) > 0:
 			impact = dependencies.impact(state.changedPaths)
 			if impact.deploy {
+				for _, match := range impact.matches {
+					path := match.path
+					if relativePath, err := filepath.Rel(state.repoPath, path); err == nil {
+						path = filepath.ToSlash(relativePath)
+					}
+					slog.Debug("Git change affects stack",
+						"stack_name", loaded.project.Name,
+						"action", string(match.action),
+						"path", path,
+						"reason", match.reason,
+						"rebuild", match.rebuild,
+					)
+				}
 				slog.Info("Changed stack detected", "stack_name", loaded.project.Name)
 			}
 		}
@@ -186,11 +201,11 @@ func deploymentOrder(stacks map[string]loadedStack, startupOrder []string) []str
 	return order
 }
 
-// absolutePaths converts repository-relative Git paths into a deduplicated absolute set.
-func absolutePaths(root string, paths []string) map[string]struct{} {
-	absolute := make(map[string]struct{}, len(paths))
-	for _, path := range paths {
-		absolute[filepath.Clean(filepath.Join(root, path))] = struct{}{}
+// absoluteChanges converts repository-relative Git changes into an absolute path map.
+func absoluteChanges(root string, changes []gitrepo.FileChange) map[string]gitrepo.ChangeAction {
+	absolute := make(map[string]gitrepo.ChangeAction, len(changes))
+	for _, change := range changes {
+		absolute[filepath.Clean(filepath.Join(root, change.Path))] = change.Action
 	}
 	return absolute
 }

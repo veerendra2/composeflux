@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
+
+	"github.com/veerendra2/composeflux/pkg/gitrepo"
 )
 
 type dependencyPaths struct {
@@ -30,8 +32,16 @@ type stackDependencies struct {
 }
 
 type changeImpact struct {
-	deploy bool
-	build  bool
+	deploy  bool
+	build   bool
+	matches []changeMatch
+}
+
+type changeMatch struct {
+	path    string
+	action  gitrepo.ChangeAction
+	reason  string
+	rebuild bool
 }
 
 // resolvePathWithinRoot resolves symlinks and rejects paths outside root.
@@ -224,43 +234,52 @@ func buildStackDependencies(repoPath string, project *types.Project, extraFiles,
 }
 
 // impact determines whether changed paths require deployment and image rebuilding.
-func (d stackDependencies) impact(changedPaths map[string]struct{}) changeImpact {
+func (d stackDependencies) impact(changedPaths map[string]gitrepo.ChangeAction) changeImpact {
 	impact := changeImpact{}
-	for changedPath := range changedPaths {
+	for _, changedPath := range slices.Sorted(maps.Keys(changedPaths)) {
+		match := changeMatch{path: changedPath, action: changedPaths[changedPath]}
 		if d.isLocalSecret != nil && d.isLocalSecret(changedPath) {
 			secretDir := filepath.Dir(changedPath)
 			if resolvedDir, err := filepath.EvalSymlinks(secretDir); err == nil {
 				secretDir = filepath.Clean(resolvedDir)
 			}
 			if _, ok := d.localSecretDirs[secretDir]; ok {
-				impact.deploy = true
+				match.reason = "local_secret"
 			}
 		}
 
 		for _, filePath := range d.filePaths {
 			if changedPath == filePath {
-				impact.deploy = true
 				if _, ok := d.dockerfiles[filePath]; ok {
-					impact.build = true
+					match.reason = "dockerfile"
+					match.rebuild = true
+				} else if match.reason == "" {
+					match.reason = "dependency_file"
 				}
 				break
 			}
 		}
 		for _, directoryPath := range d.directoryPaths {
 			if pathContains(directoryPath, changedPath) {
-				impact.deploy = true
+				if match.reason == "" {
+					match.reason = "dependency_directory"
+				}
 				break
 			}
 		}
 		for _, contextDir := range d.buildContexts {
 			if pathContains(contextDir, changedPath) {
-				impact.deploy = true
-				impact.build = true
+				match.rebuild = true
+				if match.reason == "" || match.reason == "dependency_directory" {
+					match.reason = "build_context"
+				}
 				break
 			}
 		}
-		if impact.deploy && impact.build {
-			return impact
+		if match.reason != "" {
+			impact.deploy = true
+			impact.build = impact.build || match.rebuild
+			impact.matches = append(impact.matches, match)
 		}
 	}
 	return impact
