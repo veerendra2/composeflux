@@ -2,12 +2,13 @@ package reconcile
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/compose-spec/compose-go/v2/dotenv"
 	"github.com/compose-spec/compose-go/v2/interpolation"
@@ -371,14 +372,29 @@ func (w *composeSourceWalker) addEnvFile(path string) {
 	w.sources.envFiles = append(w.sources.envFiles, path)
 }
 
-// sourceWalkKey identifies a source load by files, working directory, and effective environment.
+// sourceWalkKey hashes a source load's paths and effective environment for cycle detection.
 func sourceWalkKey(composeFiles []string, workingDir string, environment types.Mapping) string {
 	keys := slices.Sorted(maps.Keys(environment))
-	parts := make([]string, 0, len(composeFiles)+len(keys)+1)
-	parts = append(parts, workingDir)
-	parts = append(parts, composeFiles...)
-	for _, key := range keys {
-		parts = append(parts, key+"="+environment[key])
+	digest := sha256.New()
+	var length [8]byte
+	writeUint64 := func(value uint64) {
+		binary.BigEndian.PutUint64(length[:], value)
+		_, _ = digest.Write(length[:])
 	}
-	return strings.Join(parts, "\x00")
+	writeString := func(value string) {
+		writeUint64(uint64(len(value)))
+		_, _ = digest.Write([]byte(value))
+	}
+
+	writeString(workingDir)
+	writeUint64(uint64(len(composeFiles)))
+	for _, composeFile := range composeFiles {
+		writeString(composeFile)
+	}
+	writeUint64(uint64(len(keys)))
+	for _, key := range keys {
+		writeString(key)
+		writeString(environment[key])
+	}
+	return string(digest.Sum(nil))
 }
