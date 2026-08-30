@@ -3,7 +3,7 @@ site_name: ComposeFlux Docs
 site_url: https://veerendra2.github.io/composeflux/
 
 exclude_docs: |
-  DockerSwarmCompatibility.md
+  internal/
 
 theme:
   name: material

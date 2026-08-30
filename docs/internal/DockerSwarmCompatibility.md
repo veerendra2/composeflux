@@ -14,7 +14,7 @@ runtime implementation; it cannot be enabled by changing a Compose SDK option.
 
 ## Current Execution Model
 
-ComposeFlux uses the native Compose SDK through [`pkg/dockercompose`](../pkg/dockercompose/compose.go):
+ComposeFlux uses the native Compose SDK through [`pkg/dockercompose`](../../pkg/dockercompose/compose.go):
 
 ```text
 Git repository -> Compose project -> Compose SDK Up -> standalone containers
