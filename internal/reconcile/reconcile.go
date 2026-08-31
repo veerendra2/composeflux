@@ -35,6 +35,7 @@ type Reconciler struct {
 
 	reconcileMu      sync.Mutex
 	healthFailCounts map[string]int
+	pendingGitSync   *pendingGitSync
 }
 
 // New creates a reconciler from its configuration and integration clients.

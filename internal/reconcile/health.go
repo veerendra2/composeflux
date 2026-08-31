@@ -33,7 +33,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		globalEnvs, _, err := r.loadStackConfig(stackRoot)
+		globalEnvs, _, _, err := r.loadStackConfig(stackRoot)
 		if err != nil {
 			return err
 		}

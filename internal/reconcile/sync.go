@@ -4,9 +4,11 @@ package reconcile
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
@@ -20,14 +22,22 @@ type loadedStack struct {
 	build   bool
 }
 
+type pendingGitSync struct {
+	changes     []gitrepo.FileChange
+	force       bool
+	retryStacks map[string]bool
+}
+
 type syncState struct {
 	repoPath          string
+	configFile        string
 	currentStacks     StackStateMap
 	changedPaths      map[string]gitrepo.ChangeAction
 	force             bool
 	sharedSecrets     map[string]*string
 	sharedSecretFiles []string
 	sharedSecretDir   string
+	retryStacks       map[string]bool
 }
 
 // GitSync pulls changes from the Git repository and deploys stacks which are changed or new.
@@ -36,17 +46,26 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
+	if r.pendingGitSync == nil {
+		r.pendingGitSync = &pendingGitSync{force: force}
+	} else {
+		r.pendingGitSync.force = r.pendingGitSync.force || force
+		slog.Debug("Retrying pending Git reconciliation", "changed_files", len(r.pendingGitSync.changes), "force", r.pendingGitSync.force)
+	}
+	pending := r.pendingGitSync
 	changedFiles, err := r.gClient.Pull(ctx)
 	if err != nil {
 		return err
 	}
+	pending.changes = mergeFileChanges(pending.changes, changedFiles)
+
 	repoPath, stackRoot, err := r.sourceRoots()
 	if err != nil {
 		return err
 	}
-	changedPaths := absoluteChanges(repoPath, changedFiles)
+	changedPaths := absoluteChanges(repoPath, pending.changes)
 
-	globalEnv, startupOrder, err := r.loadStackConfig(stackRoot)
+	globalEnv, startupOrder, configFile, err := r.loadStackConfig(stackRoot)
 	if err != nil {
 		return err
 	}
@@ -71,23 +90,39 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 
 	toDeploy, err := r.selectStacks(ctx, composeCfgs, syncState{
 		repoPath:          repoPath,
+		configFile:        configFile,
 		currentStacks:     currentStacks,
 		changedPaths:      changedPaths,
-		force:             force,
+		force:             pending.force,
 		sharedSecrets:     sharedSecrets,
 		sharedSecretFiles: sharedSecretFiles,
 		sharedSecretDir:   sharedSecretDir,
+		retryStacks:       pending.retryStacks,
 	})
 	if err != nil {
 		return err
 	}
-	r.deployStacks(ctx, toDeploy, deploymentOrder(toDeploy, startupOrder))
-
-	clear(r.healthFailCounts)
-	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
-		slog.Error("Failed to prune stacks", "error", err)
+	failedStacks, err := r.deployStacks(ctx, toDeploy, deploymentOrder(toDeploy, startupOrder))
+	pending.changes = nil
+	pending.force = false
+	pending.retryStacks = failedStacks
+	if err != nil {
+		return err
 	}
+
+	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
+		return fmt.Errorf("failed to prune stacks: %w", err)
+	}
+	clear(r.healthFailCounts)
+	r.pendingGitSync = nil
 	return nil
+}
+
+// hasPendingGitSync reports whether a pulled change set still requires successful reconciliation.
+func (r *Reconciler) hasPendingGitSync() bool {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+	return r.pendingGitSync != nil
 }
 
 // selectStacks loads each source stack and selects those requiring deployment or rebuilding.
@@ -114,6 +149,7 @@ func (r *Reconciler) selectStacks(
 		extraFiles := append(loaded.localSecretFiles, state.sharedSecretFiles...)
 		extraFiles = append(extraFiles, loaded.sources.dependencyFiles...)
 		extraFiles = append(extraFiles, loaded.sources.envFiles...)
+		extraFiles = append(extraFiles, state.configFile)
 		dependencies := buildStackDependencies(state.repoPath, loaded.project, extraFiles, secretDirs, loaded.sources.optionalFiles)
 		if r.lClient != nil {
 			dependencies.isLocalSecret = r.lClient.IsSecretFile
@@ -125,8 +161,12 @@ func (r *Reconciler) selectStacks(
 			continue
 		}
 
+		retryBuild, retry := state.retryStacks[loaded.project.Name]
 		impact := changeImpact{}
 		switch {
+		case retry:
+			slog.Debug("Retrying failed stack", "stack_name", loaded.project.Name, "rebuild", retryBuild)
+			impact = changeImpact{deploy: true, build: retryBuild || state.force}
 		case !exists:
 			slog.Info("New stack detected", "stack_name", loaded.project.Name)
 			impact = changeImpact{deploy: true, build: true}
@@ -136,10 +176,11 @@ func (r *Reconciler) selectStacks(
 		case state.force:
 			slog.Debug("Stack selected by force sync", "stack_name", loaded.project.Name)
 			impact = changeImpact{deploy: true, build: true}
-		case len(state.changedPaths) > 0:
-			impact = dependencies.impact(state.changedPaths)
-			if impact.deploy {
-				for _, match := range impact.matches {
+		}
+		if len(state.changedPaths) > 0 && (retry || !impact.deploy) {
+			changedImpact := dependencies.impact(state.changedPaths)
+			if changedImpact.deploy {
+				for _, match := range changedImpact.matches {
 					path := match.path
 					if relativePath, err := filepath.Rel(state.repoPath, path); err == nil {
 						path = filepath.ToSlash(relativePath)
@@ -153,6 +194,9 @@ func (r *Reconciler) selectStacks(
 					)
 				}
 				slog.Info("Changed stack detected", "stack_name", loaded.project.Name)
+				impact.deploy = true
+				impact.build = impact.build || changedImpact.build
+				impact.matches = append(impact.matches, changedImpact.matches...)
 			}
 		}
 		if impact.deploy {
@@ -162,25 +206,32 @@ func (r *Reconciler) selectStacks(
 	return selected, nil
 }
 
-// deployStacks builds and deploys selected stacks in the supplied order.
-func (r *Reconciler) deployStacks(ctx context.Context, stacks map[string]loadedStack, order []string) {
+// deployStacks builds and deploys selected stacks, returning failed stacks for targeted retries.
+func (r *Reconciler) deployStacks(ctx context.Context, stacks map[string]loadedStack, order []string) (map[string]bool, error) {
 	if len(order) > 0 {
 		slog.Info("Deploying stacks", "count", len(order), "order", strings.Join(order, ","))
 	}
+	failedStacks := make(map[string]bool)
+	var deployErrors []error
 	for _, name := range order {
 		stack := stacks[name]
 		if stack.build {
 			if err := r.dClient.Build(ctx, stack.project); err != nil {
 				slog.Warn("Failed to build stack image, skipping deploy", "stack_name", name, "error", err)
+				failedStacks[name] = true
+				deployErrors = append(deployErrors, fmt.Errorf("failed to build stack %s: %w", name, err))
 				continue
 			}
 		}
 		if err := r.Deploy(ctx, stack.project); err != nil {
 			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
+			failedStacks[name] = false
+			deployErrors = append(deployErrors, fmt.Errorf("failed to deploy stack %s: %w", name, err))
 			continue
 		}
 		slog.Info("Successfully deployed the stack", "stack_name", name)
 	}
+	return failedStacks, errors.Join(deployErrors...)
 }
 
 // deploymentOrder places configured startup-order stacks before all remaining selections.
@@ -208,6 +259,29 @@ func absoluteChanges(root string, changes []gitrepo.FileChange) map[string]gitre
 		absolute[filepath.Clean(filepath.Join(root, change.Path))] = change.Action
 	}
 	return absolute
+}
+
+// mergeFileChanges coalesces pending and newly pulled changes by path, keeping the latest action.
+func mergeFileChanges(pending, incoming []gitrepo.FileChange) []gitrepo.FileChange {
+	actions := make(map[string]gitrepo.ChangeAction, len(pending)+len(incoming))
+	for _, change := range pending {
+		actions[change.Path] = change.Action
+	}
+	for _, change := range incoming {
+		actions[change.Path] = change.Action
+	}
+
+	paths := make([]string, 0, len(actions))
+	for path := range actions {
+		paths = append(paths, path)
+	}
+	slices.Sort(paths)
+
+	changes := make([]gitrepo.FileChange, 0, len(paths))
+	for _, path := range paths {
+		changes = append(changes, gitrepo.FileChange{Path: path, Action: actions[path]})
+	}
+	return changes
 }
 
 // warnMissingStartupOrder reports configured startup entries without source directories.

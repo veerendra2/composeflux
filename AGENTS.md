@@ -16,9 +16,11 @@ cmd/composeflux/        # CLI subcommands (run, sync) setup via kong
 cmd/playground/         # Dev scratch area
 internal/reconcile/     # Core reconciliation loop, Git sync, health checks, prune logic
 pkg/dockercompose/      # Docker & Compose SDK wrapper
-pkg/secrets/            # Secrets manager integrations (Bitwarden, Infisical) — optional
 pkg/gitrepo/            # Git repository client (go-git wrapper)
+pkg/localsecrets/       # Local encrypted secret providers (Age; optional)
+pkg/remotesecrets/      # Remote secret providers (Bitwarden, Infisical; optional)
 docs/                   # MkDocs documentation
+docs/internal/          # Internal notes excluded from the published MkDocs site
 ```
 
 ---
@@ -47,7 +49,7 @@ task install        # Install govulncheck and golangci-lint
 go test -v ./internal/reconcile/... -run TestFunctionName
 
 # Run all tests in a package
-go test ./pkg/secrets/...
+go test ./pkg/localsecrets/...
 
 # Run with race detector
 go test -race ./...
@@ -91,7 +93,7 @@ import (
 
     // 3. Internal module
     "github.com/veerendra2/composeflux/internal/reconcile"
-    "github.com/veerendra2/composeflux/pkg/secrets"
+    "github.com/veerendra2/composeflux/pkg/remotesecrets"
 )
 ```
 
@@ -115,7 +117,7 @@ import (
 
 ### Interfaces and Dependency Injection
 
-- Each integration package (`secrets`, `source`, `dockercompose`) exposes an exported `Client` interface and an unexported concrete struct.
+- Each integration package (`localsecrets`, `remotesecrets`, `gitrepo`, `dockercompose`) exposes an exported `Client` interface and an unexported concrete struct.
 - `Reconciler` holds interface types only — never concrete implementations.
 
 ```go
@@ -174,7 +176,7 @@ ctx.FatalIfErrorf(ctx.Run())
 
 ### Concurrency
 
-- `reconcileMu sync.Mutex` serializes `GitSync` and `UpdateImages` to prevent concurrent execution and partial deployments — lock it as the first action in both methods.
+- `reconcileMu sync.Mutex` serializes `GitSync`, `UpdateImages`, `ReconcileHealth`, and `PruneResources` to prevent concurrent reconciliation work — lock it as the first action in each method.
 - `sync.Mutex` / `sync.RWMutex` zero values are ready to use; do not initialise them explicitly in `New()`.
 
 ### Constructor Pattern
@@ -189,10 +191,11 @@ ctx.FatalIfErrorf(ctx.Run())
 - **`ci.yml`**: Runs `golangci-lint` on all pull requests. Run `task lint` locally before opening a PR.
 - **`release.yml`**: Builds and pushes multi-arch images (`linux/amd64`, `linux/arm64`) to `ghcr.io` on semver tags (`v*.*.*`).
 
+Internal engineering and research notes belong under `docs/internal/`. Keep that directory covered by MkDocs `exclude_docs`; do not add its files to site navigation.
+
 ## Docker / Build Notes
 
 - CGO is enabled (`CGO_ENABLED=1`) for the Bitwarden SDK (Rust FFI).
 - Multi-stage Dockerfile: `golang:1.26` builder → `gcr.io/distroless/static-debian13` final image.
 - Version info injected at link time via `-ldflags` (git tag, commit SHA, branch, build date).
-- Local dev: `task compose` runs the app via `compose.yml`.
-
+- Local dev: `task compose` expects a local `compose-dev.yml` file, which is not tracked in this repository.

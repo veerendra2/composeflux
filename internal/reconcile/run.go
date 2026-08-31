@@ -14,7 +14,6 @@ func (r *Reconciler) Run(ctx context.Context) {
 	// Sync from Git during bootstrap
 	if err := r.GitSync(ctx, false); err != nil {
 		slog.Error("Failed initial sync", "error", err)
-		return
 	}
 
 	gitTicker := time.NewTicker(r.gitInterval)
@@ -67,6 +66,13 @@ func (r *Reconciler) Run(ctx context.Context) {
 			func() {
 				checkCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 				defer cancel()
+
+				if r.hasPendingGitSync() {
+					if err := r.GitSync(checkCtx, false); err != nil {
+						slog.Error("Failed to retry pending Git sync", "error", err)
+					}
+					return
+				}
 
 				ok, remoteSHA, localSHA, err := r.gClient.HasUpdates(checkCtx)
 				slog.Debug("Fetch git updates", "remote_sha", remoteSHA, "local_sha",

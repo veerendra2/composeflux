@@ -65,14 +65,14 @@ func (r *Reconciler) stackConfigPath(stackRoot string) (string, error) {
 	return resolvePathWithinRoot(stackRoot, path)
 }
 
-// loadStackConfig loads stack.yml for startup_order and global environment variables statelessly.
-func (r *Reconciler) loadStackConfig(stackRoot string) ([]string, []string, error) {
+// loadStackConfig loads stack.yml and returns its path for dependency tracking.
+func (r *Reconciler) loadStackConfig(stackRoot string) ([]string, []string, string, error) {
 	var envs []string
 	var startupOrder []string
 
 	configPath, err := r.stackConfigPath(stackRoot)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	cfg, err := Load(configPath)
 	if err != nil {
@@ -84,5 +84,5 @@ func (r *Reconciler) loadStackConfig(stackRoot string) ([]string, []string, erro
 		startupOrder = cfg.StartupOrder
 	}
 
-	return envs, startupOrder, nil
+	return envs, startupOrder, configPath, nil
 }
