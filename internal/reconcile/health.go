@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 const maxHealthReconcileAttempts = 3
 
+// ReconcileHealth redeploys unhealthy managed stacks up to the retry limit.
 func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
@@ -27,7 +29,16 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	}
 
 	if len(toReconcile) > 0 {
-		envs, _, err := r.loadEnvAndConfig()
+		repoPath, stackRoot, err := r.sourceRoots()
+		if err != nil {
+			return err
+		}
+		globalEnvs, _, _, err := r.loadStackConfig(stackRoot)
+		if err != nil {
+			return err
+		}
+
+		sharedSecrets, _, err := r.loadSharedSecrets(stackRoot)
 		if err != nil {
 			return err
 		}
@@ -39,29 +50,43 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 				continue
 			}
 
-			stackPath := filepath.Join(r.gClient.Path(), r.stackPath, stackName)
+			stackPath := filepath.Clean(filepath.Join(stackRoot, stackName))
+			if !pathWithinRoot(stackRoot, stackPath) {
+				r.healthFailCounts[stackName]++
+				slog.Warn("Stack path is outside the configured stack root", "stack_name", stackName, "stack_path", stackPath)
+				continue
+			}
 			stat, err := os.Stat(stackPath)
 			if err != nil || !stat.IsDir() {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Stack path not found or not a directory", "stack_name", stackName, "stack_path", stackPath, "error", err)
 				continue
 			}
+			stackPath, err = resolvePathWithinRoot(stackRoot, stackPath)
+			if err != nil {
+				r.healthFailCounts[stackName]++
+				slog.Warn("Stack path resolves outside the configured stack root", "stack_name", stackName, "stack_path", stackPath, "error", err)
+				continue
+			}
 
-			composeCfg, err := r.buildComposeConfig(stackPath, envs)
+			composeCfg, err := buildComposeConfig(stackPath, globalEnvs)
 			if err != nil {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", stackName, "error", err)
 				continue
 			}
 
-			project, err := r.dClient.LoadProject(ctx, composeCfg)
+			loaded, err := r.loadProjectWithSecrets(ctx, repoPath, composeCfg, sharedSecrets)
 			if err != nil {
+				if errors.Is(err, errLocalSecrets) {
+					return err
+				}
 				r.healthFailCounts[stackName]++
-				slog.Warn("Skipping, failed to load project", "path", composeCfg.WorkingDir, "error", err)
+				slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 				continue
 			}
 
-			if err := r.Deploy(ctx, project); err != nil {
+			if err := r.Deploy(ctx, loaded.project); err != nil {
 				r.healthFailCounts[stackName]++
 				slog.Warn("Failed to deploy the stack", "stack_name", stackName,
 					"attempt", r.healthFailCounts[stackName], "error", err)

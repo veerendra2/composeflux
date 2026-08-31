@@ -94,7 +94,6 @@ Make sure you have the following values for ComposeFlux:
 Add to your `.env` or compose file:
 
 ```bash
-SECRETS_PROVIDER=infisical
 INFISICAL_CLIENT_ID=<your-client-id>
 INFISICAL_CLIENT_SECRET=<your-client-secret>
 INFISICAL_ENVIRONMENT=prod

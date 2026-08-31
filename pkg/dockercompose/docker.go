@@ -7,6 +7,7 @@ import (
 	mobyClient "github.com/moby/moby/client"
 )
 
+// Prune removes unused volumes, dangling images, and build cache.
 func (c *client) Prune(ctx context.Context) {
 	// Container and Network prune skipped intentionally — these resources cannot be safely
 	// filtered by composeflux label, and pruning unmanaged stopped containers/networks is unsafe.
@@ -31,6 +32,7 @@ func (c *client) Prune(ctx context.Context) {
 	}
 }
 
+// Version returns structured Docker engine and API version attributes for logging.
 func (c *client) Version(ctx context.Context) ([]any, error) {
 	serverVersion, err := c.docker.ServerVersion(ctx, mobyClient.ServerVersionOptions{})
 	if err != nil {

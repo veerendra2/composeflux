@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
-	"github.com/veerendra2/composeflux/pkg/secrets"
-	"github.com/veerendra2/composeflux/pkg/source"
+	"github.com/veerendra2/composeflux/pkg/gitrepo"
+	"github.com/veerendra2/composeflux/pkg/localsecrets"
+	"github.com/veerendra2/composeflux/pkg/remotesecrets"
 )
 
 type Config struct {
@@ -27,15 +28,18 @@ type Reconciler struct {
 	imageUpdateSchedule string
 	pruneInterval       time.Duration
 
+	lClient localsecrets.Client
+	rClient remotesecrets.Client
+	gClient gitrepo.Client
 	dClient dockercompose.Client
-	gClient source.Client
-	sClient secrets.Client
 
 	reconcileMu      sync.Mutex
 	healthFailCounts map[string]int
+	pendingGitSync   *pendingGitSync
 }
 
-func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dockercompose.Client) (*Reconciler, error) {
+// New creates a reconciler from its configuration and integration clients.
+func New(cfg Config, lClient localsecrets.Client, rClient remotesecrets.Client, gClient gitrepo.Client, dClient dockercompose.Client) (*Reconciler, error) {
 	return &Reconciler{
 		configFile: cfg.ConfigFile,
 		stackPath:  cfg.StackPath,
@@ -45,9 +49,10 @@ func New(cfg Config, sClient secrets.Client, gClient source.Client, dClient dock
 		imageUpdateSchedule: cfg.ImageUpdateSchedule,
 		pruneInterval:       cfg.PruneInterval,
 
-		dClient: dClient,
+		lClient: lClient,
+		rClient: rClient,
 		gClient: gClient,
-		sClient: sClient,
+		dClient: dClient,
 
 		healthFailCounts: make(map[string]int),
 	}, nil

@@ -10,10 +10,12 @@ type SyncCmd struct {
 	CommonConfig `embed:""`
 }
 
+// AfterApply validates the shared configuration after CLI values are applied.
 func (s *SyncCmd) AfterApply() error {
 	return s.Validate()
 }
 
+// Run performs one forced reconciliation and then exits.
 func (s *SyncCmd) Run() error {
 	rClient, ctx, cleanup, err := s.Setup()
 	if err != nil {

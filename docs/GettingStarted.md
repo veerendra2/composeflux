@@ -6,7 +6,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 
 - Docker with Compose v2+
 - Git repository with Compose stacks
-- Secrets manager: **Bitwarden** or **Infisical** (optional, for secrets injection and deploy key fetching)
+- Secrets management: local **Age encrypted files** (`*.age`) or a remote provider (**Bitwarden** / **Infisical**)
 - SSH key for Git access (store in secrets manager or mount as volume)
 
 ## Environment Variables
@@ -18,13 +18,22 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `GIT_REPO_URL` | Git repository SSH URL (e.g., `git@github.com:user/repo.git`) |
 | `STACK_PATH`   | Path to stacks directory in repo (relative to repo root)      |
 
-### Optional - Secrets Provider
+### Optional - Local Age Encrypted Secrets
 
-| Variable           | Description                                            |
-| ------------------ | ------------------------------------------------------ |
-| `SECRETS_PROVIDER` | Secrets manager: `bitwarden` or `infisical` (optional) |
+| Variable         | Description                                                          | Default |
+| ---------------- | -------------------------------------------------------------------- | ------- |
+| `AGE_PASSPHRASE` | Passphrase used to decrypt `*.age` secret files in Git repositories | `""`    |
 
-**Bitwarden (when `SECRETS_PROVIDER=bitwarden`):**
+When unset, local secrets are disabled and ComposeFlux does not scan for `*.age` files.
+
+See the [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md) for full details on encrypting and layering secrets.
+
+### Optional - Remote Secrets Provider
+
+Configure either Bitwarden or Infisical credentials. ComposeFlux selects the provider from the configured credentials.
+Local and remote secrets can be enabled together, but only one provider may be configured in each category.
+
+**Bitwarden:**
 
 | Variable                    | Description                  | Default                                |
 | --------------------------- | ---------------------------- | -------------------------------------- |
@@ -34,7 +43,7 @@ Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
 | `BITWARDEN_API_URL`         | Bitwarden API URL            | `https://vault.bitwarden.com/api`      |
 | `BITWARDEN_IDENTITY_URL`    | Bitwarden Identity URL       | `https://vault.bitwarden.com/identity` |
 
-**Infisical (when `SECRETS_PROVIDER=infisical`):**
+**Infisical:**
 
 | Variable                  | Description                                                       | Default                     |
 | ------------------------- | ----------------------------------------------------------------- | --------------------------- |
@@ -108,8 +117,9 @@ composeflux sync
 
 ## Deploy ComposeFlux
 
-**1. Set up Secrets Manager:**
+**1. Set up Secrets:**
 
+- [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md)
 - [Bitwarden Setup Guide](how-to-guides/Bitwarden.md)
 - [Infisical Setup Guide](how-to-guides/Infisical.md)
 
@@ -124,17 +134,16 @@ composeflux sync
 GIT_REPO_URL=git@github.com:user/stacks-repo.git
 STACK_PATH=stacks
 
-# Optional - Choose a secrets provider (omit to run without secrets):
+# Option A: Local Age Encrypted Secrets
+AGE_PASSPHRASE=your-secure-passphrase
 
-# Option A: Bitwarden
-SECRETS_PROVIDER=bitwarden
-GIT_DEPLOY_KEY_SECRET_REF=aaaaaaa-bbbbb-bbbb-cccc-ddddd
-BITWARDEN_ACCESS_TOKEN=your-access-token
-BITWARDEN_ORGANIZATION_ID=your-org-id
-BITWARDEN_PROJECT_ID=your-project-id
+# Option B: Remote Bitwarden Secrets
+# GIT_DEPLOY_KEY_SECRET_REF=aaaaaaa-bbbbb-bbbb-cccc-ddddd
+# BITWARDEN_ACCESS_TOKEN=your-access-token
+# BITWARDEN_ORGANIZATION_ID=your-org-id
+# BITWARDEN_PROJECT_ID=your-project-id
 
-# Option B: Infisical
-# SECRETS_PROVIDER=infisical
+# Option C: Remote Infisical Secrets
 # GIT_DEPLOY_KEY_SECRET_REF=SSH_PRIVATE_KEY
 # INFISICAL_CLIENT_ID=your-client-id
 # INFISICAL_CLIENT_SECRET=your-client-secret
@@ -158,15 +167,16 @@ services:
       # GIT_INTERVAL: 5m              # Sync interval
       # GIT_BRANCH: main
 
-      # Secrets Manager - Bitwarden (optional)
-      # SECRETS_PROVIDER: ${SECRETS_PROVIDER}
+      # Local Age Encrypted Secrets
+      AGE_PASSPHRASE: ${AGE_PASSPHRASE}
+
+      # Remote Secrets - Bitwarden
       # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
       # BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
       # BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
       # BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
 
-      # Secrets Manager - Infisical (comment out Bitwarden above if using this)
-      # SECRETS_PROVIDER: infisical
+      # Remote Secrets - Infisical
       # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
       # INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID}
       # INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET}
@@ -196,8 +206,8 @@ services:
 
 If you prefer to mount your SSH key directly instead of storing it in the secrets manager:
 
-1. Leave `SECRETS_PROVIDER` unset (or omit it entirely)
-2. Mount your SSH key to the container at `GIT_SSH_KEY_PATH` location (default: `/.ssh/composeflux_id_rsa`)
+1. Leave the Bitwarden and Infisical credentials unset
+2. Mount your SSH key to the container at the `GIT_SSH_KEY_PATH` location (default: `/.ssh/composeflux_id_rsa`)
 
 ### Deploy Key Secret Reference
 
@@ -206,7 +216,7 @@ without mounting a local key.
 
 How `GIT_DEPLOY_KEY_SECRET_REF` works:
 
-- Requires `SECRETS_PROVIDER` to be set
+- Requires either complete Bitwarden or Infisical credentials
 - When set to a value (e.g., `SSH_PRIVATE_KEY` or a Bitwarden secret ID), ComposeFlux fetches that secret from your
   secrets manager
 - **Bitwarden**: Uses it as the secret ID to fetch (see

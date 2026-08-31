@@ -62,7 +62,6 @@ Make sure you have the following values for ComposeFlux:
 Add to your `.env` or compose file:
 
 ```bash
-SECRETS_PROVIDER=bitwarden
 BITWARDEN_ACCESS_TOKEN=<your-access-token>
 BITWARDEN_ORGANIZATION_ID=<your-org-id>
 BITWARDEN_PROJECT_ID=<your-project-id>

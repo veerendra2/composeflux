@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/compose-spec/compose-go/v2/cli"
-	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/cli/cli/flags"
@@ -51,11 +50,10 @@ type ComposeConfig struct {
 	Env          []string
 }
 
+// LoadProject resolves a Compose configuration into the normalized project model.
 func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*types.Project, error) {
 	c.logHook.setStackName(filepath.Base(composeCfg.WorkingDir))
 	defer c.logHook.setStackName("")
-
-	var extraComposeFiles []string
 
 	project, err := c.compose.LoadProject(ctx, api.ProjectLoadOptions{
 		ConfigPaths: composeCfg.ComposeFiles,
@@ -65,53 +63,16 @@ func (c *client) LoadProject(ctx context.Context, composeCfg ComposeConfig) (*ty
 			cli.WithInterpolation(true),
 			cli.WithNormalization(true),
 			cli.WithResolvedPaths(true),
-			cli.WithLoadOptions(func(o *loader.Options) {
-				o.Listeners = append(o.Listeners, func(event string, metadata map[string]any) {
-					if event == "include" {
-						wd, _ := metadata["workingdir"].(string)
-						if wd == "" {
-							wd = composeCfg.WorkingDir
-						}
-						var fileList []string
-						switch v := metadata["path"].(type) {
-						case types.StringList:
-							fileList = v
-						case []string:
-							fileList = v
-						case string:
-							fileList = []string{v}
-						}
-						for _, p := range fileList {
-							if !filepath.IsAbs(p) {
-								p = filepath.Join(wd, p)
-							}
-							extraComposeFiles = append(extraComposeFiles, filepath.Clean(p))
-						}
-					}
-				})
-			}),
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if len(extraComposeFiles) > 0 {
-		seen := make(map[string]bool)
-		for _, f := range project.ComposeFiles {
-			seen[f] = true
-		}
-		for _, f := range extraComposeFiles {
-			if !seen[f] {
-				seen[f] = true
-				project.ComposeFiles = append(project.ComposeFiles, f)
-			}
-		}
-	}
-
 	return project, nil
 }
 
+// Build builds project services that define a build configuration.
 func (c *client) Build(ctx context.Context, project *types.Project) error {
 	for _, svc := range project.Services {
 		if svc.Build != nil {
@@ -121,35 +82,41 @@ func (c *client) Build(ctx context.Context, project *types.Project) error {
 	return nil
 }
 
+// Down stops and removes a Compose project by name.
 func (c *client) Down(ctx context.Context, projectName string) error {
 	return c.compose.Down(ctx, projectName, api.DownOptions{
 		RemoveOrphans: c.removeOrphans,
 	})
 }
 
+// List returns all Compose stacks known to Docker.
 func (c *client) List(ctx context.Context) ([]api.Stack, error) {
 	return c.compose.List(ctx, api.ListOptions{
 		All: true,
 	})
 }
 
-// https://pkg.go.dev/github.com/docker/compose/v5/pkg/api#ContainerSummary
+// Ps returns all containers belonging to a Compose project.
+// See https://pkg.go.dev/github.com/docker/compose/v5/pkg/api#ContainerSummary.
 func (c *client) Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error) {
 	return c.compose.Ps(ctx, projectName, api.PsOptions{
 		All: true,
 	})
 }
 
+// Pull downloads service images required by a project.
 func (c *client) Pull(ctx context.Context, project *types.Project) error {
 	return c.compose.Pull(ctx, project, api.PullOptions{
 		Quiet: true,
 	})
 }
 
+// Restart restarts every service in a Compose project.
 func (c *client) Restart(ctx context.Context, projectName string) error {
 	return c.compose.Restart(ctx, projectName, api.RestartOptions{})
 }
 
+// Up creates and starts a project while reconciling diverged resources.
 func (c *client) Up(ctx context.Context, project *types.Project) error {
 	return c.compose.Up(ctx, project, api.UpOptions{
 		Create: api.CreateOptions{
@@ -165,6 +132,7 @@ func (c *client) Up(ctx context.Context, project *types.Project) error {
 	})
 }
 
+// New initializes the Docker CLI and native Compose SDK client.
 func New(cfg Config) (Client, error) {
 	// Redirect Docker SDK's logrus output to slog
 	logrus.SetOutput(io.Discard)

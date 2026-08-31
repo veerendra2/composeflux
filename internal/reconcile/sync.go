@@ -1,17 +1,44 @@
-// Sync changes from upstream Git repository and deploy updated/new stacks
+// Sync changes from upstream Git repository and deploy updated/new stacks.
 package reconcile
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
+
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
+	"github.com/veerendra2/composeflux/pkg/gitrepo"
 )
+
+type loadedStack struct {
+	project *types.Project
+	build   bool
+}
+
+type pendingGitSync struct {
+	changes     []gitrepo.FileChange
+	force       bool
+	retryStacks map[string]bool
+}
+
+type syncState struct {
+	repoPath          string
+	configFile        string
+	currentStacks     StackStateMap
+	changedPaths      map[string]gitrepo.ChangeAction
+	force             bool
+	sharedSecrets     map[string]*string
+	sharedSecretFiles []string
+	sharedSecretDir   string
+	retryStacks       map[string]bool
+}
 
 // GitSync pulls changes from the Git repository and deploys stacks which are changed or new.
 // If force is true, all non-suspended stacks are deployed regardless of git diff.
@@ -19,262 +46,254 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
+	if r.pendingGitSync == nil {
+		r.pendingGitSync = &pendingGitSync{force: force}
+	} else {
+		r.pendingGitSync.force = r.pendingGitSync.force || force
+		slog.Debug("Retrying pending Git reconciliation", "changed_files", len(r.pendingGitSync.changes), "force", r.pendingGitSync.force)
+	}
+	pending := r.pendingGitSync
 	changedFiles, err := r.gClient.Pull(ctx)
 	if err != nil {
 		return err
 	}
+	pending.changes = mergeFileChanges(pending.changes, changedFiles)
 
-	repoPath, err := filepath.Abs(filepath.Clean(r.gClient.Path()))
+	repoPath, stackRoot, err := r.sourceRoots()
+	if err != nil {
+		return err
+	}
+	changedPaths := absoluteChanges(repoPath, pending.changes)
+
+	globalEnv, startupOrder, configFile, err := r.loadStackConfig(stackRoot)
+	if err != nil {
+		return err
+	}
+	composeCfgs, err := discoverComposeStacks(stackRoot, globalEnv)
+	if err != nil {
+		return err
+	}
+	warnMissingStartupOrder(stackRoot, startupOrder)
+
+	currentStacks, err := r.getStackStates(ctx)
+	if err != nil {
+		return err
+	}
+	sharedSecrets, sharedSecretFiles, err := r.loadSharedSecrets(stackRoot)
+	if err != nil {
+		return err
+	}
+	var sharedSecretDir string
+	if r.lClient != nil {
+		sharedSecretDir = stackRoot
+	}
+
+	toDeploy, err := r.selectStacks(ctx, composeCfgs, syncState{
+		repoPath:          repoPath,
+		configFile:        configFile,
+		currentStacks:     currentStacks,
+		changedPaths:      changedPaths,
+		force:             pending.force,
+		sharedSecrets:     sharedSecrets,
+		sharedSecretFiles: sharedSecretFiles,
+		sharedSecretDir:   sharedSecretDir,
+		retryStacks:       pending.retryStacks,
+	})
+	if err != nil {
+		return err
+	}
+	failedStacks, err := r.deployStacks(ctx, toDeploy, deploymentOrder(toDeploy, startupOrder))
+	pending.changes = nil
+	pending.force = false
+	pending.retryStacks = failedStacks
 	if err != nil {
 		return err
 	}
 
-	// Convert relative git changed files to absolute cleaned paths
-	changedPathMap := make(map[string]struct{})
-	for _, f := range changedFiles {
-		absPath := filepath.Clean(filepath.Join(repoPath, f))
-		changedPathMap[absPath] = struct{}{}
+	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
+		return fmt.Errorf("failed to prune stacks: %w", err)
 	}
+	clear(r.healthFailCounts)
+	r.pendingGitSync = nil
+	return nil
+}
 
-	envs, startupOrder, err := r.loadEnvAndConfig()
-	if err != nil {
-		return err
-	}
+// hasPendingGitSync reports whether a pulled change set still requires successful reconciliation.
+func (r *Reconciler) hasPendingGitSync() bool {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+	return r.pendingGitSync != nil
+}
 
-	// Discover compose stacks
-	composeCfgs, err := r.discoverComposeStack(envs)
-	if err != nil {
-		return err
-	}
-
-	// Validate StartupOrder directories and log warning if not exists
-	for _, stackName := range startupOrder {
-		startupItemDir := filepath.Join(repoPath, r.stackPath, stackName)
-		if _, err := os.Stat(startupItemDir); errors.Is(err, os.ErrNotExist) {
-			slog.Warn("Stack directory in startup_order not found",
-				"startup_order_item", stackName,
-				"expected_path", startupItemDir)
-		}
-	}
-
-	// Get current running stacks info
-	currentStackMap, err := r.getStackStates(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Store projects to deploy
-	// Map of Stack name -> loaded Project
-	toDeploy := make(map[string]*types.Project)
-	// Track whether build.context changed for each stack
-	buildNeededMap := make(map[string]bool)
-
-	// Determine which stacks are changed and deploy those
+// selectStacks loads each source stack and selects those requiring deployment or rebuilding.
+func (r *Reconciler) selectStacks(
+	ctx context.Context,
+	composeCfgs []dockercompose.ComposeConfig,
+	state syncState,
+) (map[string]loadedStack, error) {
+	selected := make(map[string]loadedStack)
 	for _, composeCfg := range composeCfgs {
-		project, err := r.dClient.LoadProject(ctx, composeCfg)
+		loaded, err := r.loadProjectWithSecrets(ctx, state.repoPath, composeCfg, state.sharedSecrets)
 		if err != nil {
-			slog.Warn("Skipping, failed to load project", "path", composeCfg.WorkingDir, "error", err)
+			if errors.Is(err, errLocalSecrets) {
+				return nil, err
+			}
+			slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
-		deps := dockercompose.GetDependencyPaths(project)
-		sep := string(filepath.Separator)
-
-		// Validate dependency paths and filter in-repository dependencies
-		defaultEnvPath := filepath.Join(project.WorkingDir, ".env")
-		var inRepoFileDeps []string
-		var inRepoDirDeps []string
-
-		for _, dep := range deps.FilePaths {
-			rel, err := filepath.Rel(repoPath, dep)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
-				// Path is outside the repository (e.g. host bind mounts /media/...).
-				// Skip os.Stat since host filesystems are not mounted inside ComposeFlux container.
-				continue
-			}
-
-			// Path is inside the Git repository clone directory — check if it exists on disk
-			fi, err := os.Stat(dep)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) && dep != defaultEnvPath {
-					slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", dep)
-				}
-				// Skip paths we cannot stat (ErrNotExist or permission error) — we
-				// cannot determine whether they are files or directories, so including
-				// them in the wrong bucket would produce incorrect change detection.
-				continue
-			}
-
-			if fi.IsDir() {
-				inRepoDirDeps = append(inRepoDirDeps, dep)
-			} else {
-				inRepoFileDeps = append(inRepoFileDeps, dep)
-			}
+		secretDirs := append([]string(nil), loaded.localSecretDirs...)
+		if state.sharedSecretDir != "" {
+			secretDirs = append(secretDirs, state.sharedSecretDir)
+		}
+		extraFiles := append(loaded.localSecretFiles, state.sharedSecretFiles...)
+		extraFiles = append(extraFiles, loaded.sources.dependencyFiles...)
+		extraFiles = append(extraFiles, loaded.sources.envFiles...)
+		extraFiles = append(extraFiles, state.configFile)
+		dependencies := buildStackDependencies(state.repoPath, loaded.project, extraFiles, secretDirs, loaded.sources.optionalFiles)
+		if r.lClient != nil {
+			dependencies.isLocalSecret = r.lClient.IsSecretFile
 		}
 
-		var inRepoBuildContexts []string
-		for _, ctxDir := range deps.BuildContexts {
-			rel, err := filepath.Rel(repoPath, ctxDir)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
-				continue
-			}
-
-			if _, err := os.Stat(ctxDir); errors.Is(err, os.ErrNotExist) {
-				slog.Warn("Build context directory does not exist", "stack_name", project.Name, "path", ctxDir)
-			}
-
-			inRepoBuildContexts = append(inRepoBuildContexts, ctxDir)
-		}
-
-		// Pre-compute Dockerfile paths for buildNeeded detection
-		dockerfilePaths := make(map[string]bool)
-		for _, svc := range project.Services {
-			if svc.Build != nil {
-				ctxDir := svc.Build.Context
-				if !filepath.IsAbs(ctxDir) {
-					ctxDir = filepath.Join(project.WorkingDir, ctxDir)
-				}
-
-				dfPath := svc.Build.Dockerfile
-				if dfPath == "" {
-					dfPath = "Dockerfile"
-				}
-				if !filepath.IsAbs(dfPath) {
-					dfPath = filepath.Join(ctxDir, dfPath)
-				}
-				dockerfilePaths[filepath.Clean(dfPath)] = true
-			}
-		}
-
-		// Check if stack needs deployment
-		stackInfo, exists := currentStackMap[project.Name]
+		stackInfo, exists := state.currentStacks[loaded.project.Name]
 		if exists && stackInfo.Suspend {
-			slog.Debug("Skipping suspended stack", "stack_name", project.Name)
+			slog.Debug("Skipping suspended stack", "stack_name", loaded.project.Name)
 			continue
 		}
 
-		if !exists {
-			slog.Info("New stack detected", "stack_name", project.Name)
-			toDeploy[project.Name] = project
-			buildNeededMap[project.Name] = true
-		} else if !stackInfo.Healthy {
-			slog.Info("Unhealthy stack detected", "stack_name", project.Name)
-			toDeploy[project.Name] = project
-			buildNeededMap[project.Name] = true
-		} else if force {
-			toDeploy[project.Name] = project
-			buildNeededMap[project.Name] = true
-		} else if len(changedFiles) > 0 {
-			// Stack is running, check if any changed file in git overlaps with stack's dependency tree
-			hasMatch := false
-			buildNeeded := false
-
-			for changedPath := range changedPathMap {
-				// 1. Check exact file or path equality match for file dependencies
-				for _, dep := range inRepoFileDeps {
-					if changedPath == dep {
-						hasMatch = true
-						if dockerfilePaths[dep] {
-							buildNeeded = true
-						}
-						slog.Debug("Changed dependency file detected in stack", "stack_name", project.Name, "file", changedPath, "dep", dep)
-						break
+		retryBuild, retry := state.retryStacks[loaded.project.Name]
+		impact := changeImpact{}
+		switch {
+		case retry:
+			slog.Debug("Retrying failed stack", "stack_name", loaded.project.Name, "rebuild", retryBuild)
+			impact = changeImpact{deploy: true, build: retryBuild || state.force}
+		case !exists:
+			slog.Info("New stack detected", "stack_name", loaded.project.Name)
+			impact = changeImpact{deploy: true, build: true}
+		case !stackInfo.Healthy:
+			slog.Info("Unhealthy stack detected", "stack_name", loaded.project.Name)
+			impact = changeImpact{deploy: true, build: true}
+		case state.force:
+			slog.Debug("Stack selected by force sync", "stack_name", loaded.project.Name)
+			impact = changeImpact{deploy: true, build: true}
+		}
+		if len(state.changedPaths) > 0 && (retry || !impact.deploy) {
+			changedImpact := dependencies.impact(state.changedPaths)
+			if changedImpact.deploy {
+				for _, match := range changedImpact.matches {
+					path := match.path
+					if relativePath, err := filepath.Rel(state.repoPath, path); err == nil {
+						path = filepath.ToSlash(relativePath)
 					}
+					slog.Debug("Git change affects stack",
+						"stack_name", loaded.project.Name,
+						"action", string(match.action),
+						"path", path,
+						"reason", match.reason,
+						"rebuild", match.rebuild,
+					)
 				}
-
-				// 2. Check directory bind mounts (pre-computed directory dependencies)
-				if !hasMatch {
-					for _, dirDep := range inRepoDirDeps {
-						dirPrefix := dirDep
-						if !strings.HasSuffix(dirPrefix, sep) {
-							dirPrefix += sep
-						}
-						if changedPath == dirDep || strings.HasPrefix(changedPath, dirPrefix) {
-							hasMatch = true
-							slog.Debug("Changed file in volume directory detected in stack", "stack_name", project.Name, "file", changedPath, "dir", dirDep)
-							break
-						}
-					}
-				}
-
-				// 3. Check recursive match for build contexts
-				for _, ctxDir := range inRepoBuildContexts {
-					ctxPrefix := ctxDir
-					if !strings.HasSuffix(ctxPrefix, sep) {
-						ctxPrefix += sep
-					}
-
-					if changedPath == ctxDir || strings.HasPrefix(changedPath, ctxPrefix) {
-						hasMatch = true
-						buildNeeded = true
-						slog.Debug("Changed file in build context detected in stack", "stack_name", project.Name, "file", changedPath, "build_context", ctxDir)
-						break
-					}
-				}
-
-				if hasMatch && buildNeeded {
-					break
-				}
-			}
-
-			if hasMatch {
-				slog.Info("Changed stack detected", "stack_name", project.Name)
-				toDeploy[project.Name] = project
-				buildNeededMap[project.Name] = buildNeeded
+				slog.Info("Changed stack detected", "stack_name", loaded.project.Name)
+				impact.deploy = true
+				impact.build = impact.build || changedImpact.build
+				impact.matches = append(impact.matches, changedImpact.matches...)
 			}
 		}
-	}
-
-	// Create slice to arrange stack array according to StartupOrder
-	// defined in the stack config
-	deployOrder := []string{}
-
-	for _, stackName := range startupOrder {
-		// Add StartupOrder first, if the stack in StartupOrder is also in toDeploy
-		if _, exists := toDeploy[stackName]; exists {
-			deployOrder = append(deployOrder, stackName)
+		if impact.deploy {
+			selected[loaded.project.Name] = loadedStack{project: loaded.project, build: impact.build}
 		}
 	}
+	return selected, nil
+}
 
-	// Add remaining stacks (not in StartupOrder)
-	inOrder := make(map[string]bool, len(deployOrder))
-	for _, name := range deployOrder {
-		inOrder[name] = true
+// deployStacks builds and deploys selected stacks, returning failed stacks for targeted retries.
+func (r *Reconciler) deployStacks(ctx context.Context, stacks map[string]loadedStack, order []string) (map[string]bool, error) {
+	if len(order) > 0 {
+		slog.Info("Deploying stacks", "count", len(order), "order", strings.Join(order, ","))
 	}
-
-	for stackName := range toDeploy {
-		if !inOrder[stackName] {
-			deployOrder = append(deployOrder, stackName)
-		}
-	}
-
-	if len(deployOrder) > 0 {
-		slog.Info("Deploying stacks", "count", len(deployOrder), "order", strings.Join(deployOrder, ","))
-	}
-
-	for _, name := range deployOrder {
-		project := toDeploy[name]
-		if buildNeededMap[name] {
-			if err := r.dClient.Build(ctx, project); err != nil {
+	failedStacks := make(map[string]bool)
+	var deployErrors []error
+	for _, name := range order {
+		stack := stacks[name]
+		if stack.build {
+			if err := r.dClient.Build(ctx, stack.project); err != nil {
 				slog.Warn("Failed to build stack image, skipping deploy", "stack_name", name, "error", err)
+				failedStacks[name] = true
+				deployErrors = append(deployErrors, fmt.Errorf("failed to build stack %s: %w", name, err))
 				continue
 			}
 		}
-
-		if err := r.Deploy(ctx, project); err != nil {
+		if err := r.Deploy(ctx, stack.project); err != nil {
 			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
+			failedStacks[name] = false
+			deployErrors = append(deployErrors, fmt.Errorf("failed to deploy stack %s: %w", name, err))
 			continue
 		}
 		slog.Info("Successfully deployed the stack", "stack_name", name)
 	}
+	return failedStacks, errors.Join(deployErrors...)
+}
 
-	// Reset health fail counters — Git sync is the authoritative source of truth
-	clear(r.healthFailCounts)
+// deploymentOrder places configured startup-order stacks before all remaining selections.
+func deploymentOrder(stacks map[string]loadedStack, startupOrder []string) []string {
+	order := make([]string, 0, len(stacks))
+	added := make(map[string]struct{}, len(stacks))
+	for _, name := range startupOrder {
+		if _, exists := stacks[name]; exists {
+			order = append(order, name)
+			added[name] = struct{}{}
+		}
+	}
+	for name := range stacks {
+		if _, exists := added[name]; !exists {
+			order = append(order, name)
+		}
+	}
+	return order
+}
 
-	// Prune stacks which are not in the Git repository
-	if err := r.PruneStacks(ctx, composeCfgs); err != nil {
-		slog.Error("Failed to prune stacks", "error", err)
+// absoluteChanges converts repository-relative Git changes into an absolute path map.
+func absoluteChanges(root string, changes []gitrepo.FileChange) map[string]gitrepo.ChangeAction {
+	absolute := make(map[string]gitrepo.ChangeAction, len(changes))
+	for _, change := range changes {
+		absolute[filepath.Clean(filepath.Join(root, change.Path))] = change.Action
+	}
+	return absolute
+}
+
+// mergeFileChanges coalesces pending and newly pulled changes by path, keeping the latest action.
+func mergeFileChanges(pending, incoming []gitrepo.FileChange) []gitrepo.FileChange {
+	actions := make(map[string]gitrepo.ChangeAction, len(pending)+len(incoming))
+	for _, change := range pending {
+		actions[change.Path] = change.Action
+	}
+	for _, change := range incoming {
+		actions[change.Path] = change.Action
 	}
 
-	return nil
+	paths := make([]string, 0, len(actions))
+	for path := range actions {
+		paths = append(paths, path)
+	}
+	slices.Sort(paths)
+
+	changes := make([]gitrepo.FileChange, 0, len(paths))
+	for _, path := range paths {
+		changes = append(changes, gitrepo.FileChange{Path: path, Action: actions[path]})
+	}
+	return changes
+}
+
+// warnMissingStartupOrder reports configured startup entries without source directories.
+func warnMissingStartupOrder(stackRoot string, startupOrder []string) {
+	for _, stackName := range startupOrder {
+		path := filepath.Clean(filepath.Join(stackRoot, stackName))
+		if !pathWithinRoot(stackRoot, path) {
+			slog.Warn("Stack directory in startup_order is outside stack root", "startup_order_item", stackName)
+			continue
+		}
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			slog.Warn("Stack directory in startup_order not found", "startup_order_item", stackName, "expected_path", path)
+		}
+	}
 }

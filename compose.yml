@@ -6,11 +6,13 @@ services:
     container_name: composeflux
     environment:
       # Reconciler Configuration
-      SECRETS_PROVIDER: ${SECRETS_PROVIDER}
       STACK_PATH: ${STACK_PATH}
       # CONFIG_FILE: stack.yml
       # GIT_INTERVAL: 5m
       # IMAGE_UPDATE_SCHEDULE: ""
+
+      # Local Secrets Configuration
+      AGE_PASSPHRASE: ${AGE_PASSPHRASE}
 
       # Git Source Configuration
       GIT_REPO_URL: ${GIT_REPO_URL}

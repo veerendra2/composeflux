@@ -35,3 +35,4 @@ go.work.sum
 dist/.claude/
 
 .claude
+docs/superpowers/

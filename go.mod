@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	filippo.io/age v1.2.1
 	github.com/alecthomas/kong v1.16.1
 	github.com/bitwarden/sdk-go/v2 v2.1.0
 	github.com/compose-spec/compose-go/v2 v2.14.0
