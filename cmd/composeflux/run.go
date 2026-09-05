@@ -17,6 +17,5 @@ func (r *RunCmd) Run() error {
 	}
 	defer cleanup()
 
-	rClient.Run(ctx)
-	return nil
+	return rClient.Run(ctx)
 }

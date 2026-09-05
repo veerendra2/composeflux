@@ -26,12 +26,12 @@ type CommonConfig struct {
 	DockerCompose dockercompose.Config `embed:"" group:"Docker Compose Options:"`
 }
 
-// Validate checks provider-specific configuration
+// Validate checks shared configuration before initializing clients.
 func (c *CommonConfig) Validate() error {
 	if c.Source.DeployKeySecretRef != "" && !c.RemoteSecrets.Configured() {
 		return fmt.Errorf("--deploy-key-secret-ref requires Bitwarden or Infisical credentials")
 	}
-	return nil
+	return c.Reconciler.Validate()
 }
 
 // InitClients initializes all required clients (secrets, git, docker, reconciler)

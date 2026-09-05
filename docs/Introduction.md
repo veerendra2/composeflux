@@ -25,8 +25,21 @@ remote Git repository for changes and syncs again when updates are detected.
 6. Deploys stacks that have file updates or are missing from Docker (respects [`startup_order`](#stack-configuration))
 7. Prunes stacks deleted from Git
 
+!!! warning
+
+    Git is the source of truth for the managed checkout. Before startup checkout and each Git sync reset, ComposeFlux
+    discards local changes to tracked files and logs a warning listing the affected paths. This includes changes made
+    by applications through writable bind mounts. Unrelated untracked files are preserved; files at paths required by
+    the target Git revision are not protected from replacement. Keep mutable application data outside tracked files.
+
+The deployment summary reports `deployed`, `deploy_failed`, `load_failed`, and `skipped` counts. `skipped` means
+unchanged or suspended stacks, not loading failures. The summary is logged as a warning if any stack fails to load,
+build, or deploy; other stacks continue under the existing reconciliation policy. Pruning is reported separately.
+
 Optionally, a separate cron-scheduled image update check (`IMAGE_UPDATE_SCHEDULE`) pulls new images and redeploys stacks
-when a new image digest is detected.
+when a new image digest is detected. If an image-update job is still running, the next scheduled invocation is skipped.
+Shutdown waits for active image-update jobs before closing clients; an unresponsive secrets-provider request can delay
+that wait.
 
 Two additional background loops run independently:
 
@@ -114,6 +127,11 @@ With this configuration, Traefik deploys first, then the rest of the stacks depl
 - Names in `startup_order` must match directory names exactly
 - No need to list all stacks - only ones requiring specific order
 - Do not set a custom `name:` in your `compose.yml`. The Docker Compose project name must match the stack directory name.
+  Projects with mismatched names are rejected before building or deploying; ComposeFlux does not rename them.
+
+A missing `stack.yml` is allowed. If an existing file is malformed or unreadable, ComposeFlux stops that reconciliation
+pass instead of deploying with empty shared variables or startup order. An error returned by the initial sync exits
+the daemon; later reconciliation errors are logged and the daemon keeps running.
 
 ## Multi-Server Setup
 
@@ -203,13 +221,18 @@ services:
       composeflux.health.suspend: "true"
 ```
 
-Commit the change — ComposeFlux will redeploy with the label applied. To resume reconciliation, remove the label and
-commit again.
+Commit the change. Once ComposeFlux pulls it, the label in the loaded Git Compose project suspends the stack without
+redeploying it. To resume reconciliation, remove the label and commit again.
 
-**When any container in a stack has this label:**
+**When any active service in the Git Compose project has this label:**
 
+- Git deployment skips the stack, including manual force sync
 - The health reconciliation loop skips that stack entirely
+- Automatic image updates skip the stack entirely
 - The Docker resource prune loop aborts and skips pruning for the entire run
+
+Running-container labels do not override the Git configuration. Deleting the stack from Git still requests its removal,
+even if its old containers carry a suspension label.
 
 This is useful during maintenance operations — for example, labelling a database service as suspended before stopping it
 for a backup (`docker stop postgres`) without triggering an immediate reconcile that would restart it.
@@ -221,9 +244,10 @@ When `PRUNE_INTERVAL` is set, ComposeFlux runs a periodic prune cycle (default: 
 
 **What is pruned:** dangling (untagged) images, volumes, build cache. Containers and networks are not pruned.
 
-**Safety guard:** The prune cycle only runs when **all** composeflux-managed stacks are healthy. If any stack is
-stopped, degraded, or has the `composeflux.health.suspend=true` label set, the prune cycle is skipped for that interval and
-a warning is logged.
+**Safety guard:** The prune cycle requires every discovered source stack to be present and healthy in Docker.
+If a source stack is missing, stopped, degraded, or has `composeflux.health.suspend=true` in its loaded Git Compose
+project, the prune cycle is skipped for that interval and a warning is logged. Failure to load a source project or
+its required shared secrets also prevents resource pruning.
 
 ## Blog Posts
 

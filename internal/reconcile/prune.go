@@ -16,7 +16,7 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	_, stackRoot, err := r.sourceRoots()
+	repoPath, stackRoot, err := r.sourceRoots()
 	if err != nil {
 		return err
 	}
@@ -35,6 +35,11 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 		return err
 	}
 
+	sharedSecrets, _, err := r.loadSharedSecrets(stackRoot)
+	if err != nil {
+		return err
+	}
+
 	// We skip pruning if any stack is missing from Docker, unhealthy, or suspended
 	// See https://github.com/veerendra2/composeflux/issues/31
 	for _, src := range srcStacks {
@@ -48,7 +53,11 @@ func (r *Reconciler) PruneResources(ctx context.Context) error {
 			slog.Warn("Skipping prune", "reason", "unhealthy stack", "stack_name", stackName)
 			return nil
 		}
-		if status.Suspend {
+		loaded, err := r.loadProjectWithSecrets(ctx, repoPath, src, sharedSecrets)
+		if err != nil {
+			return fmt.Errorf("failed to load stack %s for pruning: %w", stackName, err)
+		}
+		if hasProjectLabel(loaded.project, LabelSuspend) {
 			slog.Warn("Skipping prune", "reason", "suspended stack", "stack_name", stackName)
 			return nil
 		}

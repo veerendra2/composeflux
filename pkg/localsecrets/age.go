@@ -24,17 +24,16 @@ func (c AgeConfig) configured() bool {
 }
 
 type ageClient struct {
-	passphrase string
-	identity   *age.ScryptIdentity
+	identity *age.ScryptIdentity
 }
 
-// newAgeClient prepares the reusable age identity when a passphrase is configured.
-func newAgeClient(passphrase string) *ageClient {
-	var identity *age.ScryptIdentity
-	if passphrase != "" {
-		identity, _ = age.NewScryptIdentity(passphrase)
+// newAgeClient prepares the reusable age identity.
+func newAgeClient(passphrase string) (*ageClient, error) {
+	identity, err := age.NewScryptIdentity(passphrase)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)
 	}
-	return &ageClient{passphrase: passphrase, identity: identity}
+	return &ageClient{identity: identity}, nil
 }
 
 // Decrypt scans dir for age-encrypted dotenv files and returns their merged values and paths.
@@ -96,25 +95,12 @@ func findFiles(dir string) ([]string, error) {
 
 // decryptEnvFile decrypts age-encrypted dotenv data in binary or armored format.
 func (c *ageClient) decryptEnvFile(filePath string, data []byte) (map[string]*string, error) {
-	if c.passphrase == "" {
-		return nil, fmt.Errorf("cannot decrypt %s: age passphrase is not set (use --age-passphrase or AGE_PASSPHRASE)", filePath)
-	}
-
 	var inReader io.Reader = bytes.NewReader(data)
 	if bytes.Contains(data, []byte("-----BEGIN AGE ENCRYPTED FILE-----")) {
 		inReader = armor.NewReader(bytes.NewReader(data))
 	}
 
-	identity := c.identity
-	if identity == nil {
-		var err error
-		identity, err = age.NewScryptIdentity(c.passphrase)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize age scrypt identity: %w", err)
-		}
-	}
-
-	decryptedReader, err := age.Decrypt(inReader, identity)
+	decryptedReader, err := age.Decrypt(inReader, c.identity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt age file %s: %w", filePath, err)
 	}

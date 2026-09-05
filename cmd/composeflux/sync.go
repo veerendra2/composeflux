@@ -32,6 +32,6 @@ func (s *SyncCmd) Run() error {
 		return err
 	}
 
-	slog.Info("Sync completed successfully")
+	slog.Info("One-shot sync finished")
 	return nil
 }

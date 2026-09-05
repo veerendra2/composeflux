@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-
-	"github.com/compose-spec/compose-go/v2/types"
 )
 
 // UpdateImages checks all discovered stacks for Docker image updates and redeploys any that have new images.
 func (r *Reconciler) UpdateImages(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	repoPath, stackRoot, err := r.sourceRoots()
 	if err != nil {
@@ -43,7 +45,11 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 			continue
 		}
 
-		if hasImageUpdateExcludeLabel(loaded.project) {
+		if hasProjectLabel(loaded.project, LabelSuspend) {
+			slog.Info("Stack is suspended, skipping image updates", "stack_name", loaded.project.Name)
+			continue
+		}
+		if hasProjectLabel(loaded.project, LabelImageUpdateExclude) {
 			slog.Info("Stack has image update excluded, skipping", "stack_name", loaded.project.Name)
 			continue
 		}
@@ -74,14 +80,4 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// hasImageUpdateExcludeLabel checks if any service in the project has the image update exclude label.
-func hasImageUpdateExcludeLabel(project *types.Project) bool {
-	for _, svc := range project.Services {
-		if excludeValue, ok := svc.Labels[LabelImageUpdateExclude]; ok && excludeValue == "true" {
-			return true
-		}
-	}
-	return false
 }

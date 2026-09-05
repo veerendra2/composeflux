@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 
 	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -53,6 +54,7 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, repoPath string
 		return loadedProject{}, fmt.Errorf("invalid stack directory %s: %w", composeCfg.WorkingDir, err)
 	}
 	loaded := loadedProject{}
+	directorySecrets := make(map[string]map[string]*string)
 	if r.lClient != nil {
 		loaded.localSecretDirs = append(loaded.localSecretDirs, workingDir)
 		localSecrets, localFiles, err := r.lClient.Decrypt(workingDir)
@@ -60,6 +62,7 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, repoPath string
 			return loadedProject{}, fmt.Errorf("%w in %s: %w", errLocalSecrets, workingDir, err)
 		}
 		maps.Copy(stackSecrets, localSecrets)
+		directorySecrets[workingDir] = localSecrets
 		loaded.localSecretFiles = append(loaded.localSecretFiles, localFiles...)
 	}
 
@@ -74,18 +77,16 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, repoPath string
 		return loadedProject{}, fmt.Errorf("failed to prepare Compose environment: %w", err)
 	}
 
-	seenDirs := map[string]struct{}{workingDir: {}}
 	loadDirectorySecrets := func(dir string, environment types.Mapping) (types.Mapping, error) {
 		dir, err := resolvePathWithinRoot(repoPath, dir)
 		if err != nil {
 			return nil, err
 		}
-		if _, seen := seenDirs[dir]; seen {
-			return environment, nil
-		}
-		seenDirs[dir] = struct{}{}
 		if r.lClient == nil {
 			return environment, nil
+		}
+		if secrets, seen := directorySecrets[dir]; seen {
+			return secretMapping(environment, secrets), nil
 		}
 		loaded.localSecretDirs = append(loaded.localSecretDirs, dir)
 		localSecrets, localFiles, err := r.lClient.Decrypt(dir)
@@ -93,6 +94,7 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, repoPath string
 			return nil, fmt.Errorf("%w in %s: %w", errLocalSecrets, dir, err)
 		}
 		maps.Copy(stackSecrets, localSecrets)
+		directorySecrets[dir] = localSecrets
 		loaded.localSecretFiles = append(loaded.localSecretFiles, localFiles...)
 		return secretMapping(environment, localSecrets), nil
 	}
@@ -107,8 +109,20 @@ func (r *Reconciler) loadProjectWithSecrets(ctx context.Context, repoPath string
 	if err != nil {
 		return loadedProject{}, err
 	}
+	if expectedName := filepath.Base(composeCfg.WorkingDir); loaded.project.Name != expectedName {
+		return loadedProject{}, fmt.Errorf("compose project name %q must match stack directory %q", loaded.project.Name, expectedName)
+	}
 	loaded.project.ComposeFiles = loaded.sources.composeFiles
 	return loaded, nil
+}
+
+func hasProjectLabel(project *types.Project, label string) bool {
+	for _, service := range project.Services {
+		if service.Labels[label] == ValueTrue {
+			return true
+		}
+	}
+	return false
 }
 
 // secretMapping overlays non-nil secret values on a Compose environment.

@@ -3,7 +3,6 @@ package reconcile
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -76,13 +75,15 @@ func (r *Reconciler) loadStackConfig(stackRoot string) ([]string, []string, stri
 	}
 	cfg, err := Load(configPath)
 	if err != nil {
-		slog.Warn("Failed to load stack config", "path", configPath, "error", err)
-	} else {
-		for key, value := range cfg.Envs {
-			envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil, configPath, nil
 		}
-		startupOrder = cfg.StartupOrder
+		return nil, nil, "", fmt.Errorf("failed to load stack config %s: %w", configPath, err)
 	}
+	for key, value := range cfg.Envs {
+		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	}
+	startupOrder = cfg.StartupOrder
 
 	return envs, startupOrder, configPath, nil
 }

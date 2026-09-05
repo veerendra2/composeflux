@@ -74,7 +74,11 @@ Local and remote secrets can be enabled together, but only one provider may be c
 
 !!! warning
 
-    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning only runs when **all** composeflux-managed stacks are healthy and none have the `composeflux.health.suspend=true` label set.
+    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning requires every discovered source stack to be present and healthy in Docker and none to have `composeflux.health.suspend=true` in its loaded Git Compose project.
+
+`GIT_INTERVAL` must be greater than zero. Health and prune intervals must be nonnegative; `0` disables those optional
+loops. A nonempty `IMAGE_UPDATE_SCHEDULE` must be a valid cron expression. Invalid values fail startup before clients
+are initialized.
 
 ## Commands
 
@@ -100,7 +104,8 @@ Run "composeflux <command> --help" for more information on a command.
 ```
 
 - **`run`** - Daemon mode with continuous reconciliation (default). Performs an initial sync at startup, then checks the
-  Git repository for changes at configured intervals (default: 5 minutes).
+  Git repository for changes at configured intervals (default: 5 minutes). An error returned by the initial sync exits
+  the process. Errors during later reconciliation are logged without stopping the daemon.
 - **`sync`** - One-shot sync and deploy. Performs an immediate sync and force-reconciles all managed stacks. Useful when you update secrets in your secrets manager without making Git changes. See
   [Change Detection](Introduction.md#git-diff--dependency-change-detection).
 

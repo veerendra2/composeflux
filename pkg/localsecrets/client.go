@@ -33,7 +33,7 @@ func New(cfg Config) (Client, error) {
 	case "":
 		return nil, nil
 	case "age":
-		return newAgeClient(cfg.Age.Passphrase), nil
+		return newAgeClient(cfg.Age.Passphrase)
 	default:
 		return nil, fmt.Errorf("unsupported local secrets provider: %s", provider)
 	}
