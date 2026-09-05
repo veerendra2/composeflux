@@ -3,6 +3,7 @@ package reconcile
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,10 +11,10 @@ import (
 )
 
 // Run schedules Git, health, image-update, and prune reconciliation until cancellation.
-func (r *Reconciler) Run(ctx context.Context) {
+func (r *Reconciler) Run(ctx context.Context) error {
 	// Sync from Git during bootstrap
 	if err := r.GitSync(ctx, false); err != nil {
-		slog.Error("Failed initial sync", "error", err)
+		return fmt.Errorf("failed initial sync: %w", err)
 	}
 
 	gitTicker := time.NewTicker(r.gitInterval)
@@ -37,7 +38,10 @@ func (r *Reconciler) Run(ctx context.Context) {
 
 	// Set up image update cron job if schedule is configured
 	if r.imageUpdateSchedule != "" {
-		c := cron.New()
+		cronLogger := cron.VerbosePrintfLogger(
+			slog.NewLogLogger(slog.Default().With("source", "image-update-cron").Handler(), slog.LevelDebug),
+		)
+		c := cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger)))
 		if _, err := c.AddFunc(r.imageUpdateSchedule, func() {
 			imageCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 			defer cancel()
@@ -49,7 +53,9 @@ func (r *Reconciler) Run(ctx context.Context) {
 			slog.Error("Invalid image update cron schedule, image updates disabled", "cron", r.imageUpdateSchedule, "error", err)
 		} else {
 			c.Start()
-			defer c.Stop()
+			defer func() {
+				<-c.Stop().Done()
+			}()
 			slog.Debug("Image update checks scheduled", "cron", r.imageUpdateSchedule)
 		}
 	}
@@ -59,8 +65,8 @@ func (r *Reconciler) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("Shutdown signal received, reconciliation stopped")
-			return
+			slog.Info("Shutdown signal received, stopping reconciliation")
+			return nil
 
 		case <-gitTicker.C:
 			func() {

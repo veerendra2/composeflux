@@ -1,8 +1,11 @@
 package reconcile
 
 import (
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/robfig/cron/v3"
 
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 	"github.com/veerendra2/composeflux/pkg/gitrepo"
@@ -17,6 +20,24 @@ type Config struct {
 	HealthInterval      time.Duration `name:"health-interval" help:"Interval for proactive stack health reconciliation. Set to 0 to disable." env:"HEALTH_RECONCILE_INTERVAL" default:"0" group:"Reconciler Options:"`
 	ImageUpdateSchedule string        `name:"image-update-schedule" help:"Cron expression for Docker image update checks, e.g. '0 3 * * 1'. Empty = disabled." env:"IMAGE_UPDATE_SCHEDULE" default:"" group:"Reconciler Options:"`
 	PruneInterval       time.Duration `name:"prune-interval" help:"Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all stacks are healthy. Set to 0 to disable." env:"PRUNE_INTERVAL" default:"24h" group:"Reconciler Options:"`
+}
+
+func (c Config) Validate() error {
+	if c.GitInterval <= 0 {
+		return fmt.Errorf("--git-interval must be greater than zero")
+	}
+	if c.HealthInterval < 0 {
+		return fmt.Errorf("--health-interval must not be negative")
+	}
+	if c.PruneInterval < 0 {
+		return fmt.Errorf("--prune-interval must not be negative")
+	}
+	if c.ImageUpdateSchedule != "" {
+		if _, err := cron.ParseStandard(c.ImageUpdateSchedule); err != nil {
+			return fmt.Errorf("invalid --image-update-schedule: %w", err)
+		}
+	}
+	return nil
 }
 
 type Reconciler struct {
@@ -40,6 +61,9 @@ type Reconciler struct {
 
 // New creates a reconciler from its configuration and integration clients.
 func New(cfg Config, lClient localsecrets.Client, rClient remotesecrets.Client, gClient gitrepo.Client, dClient dockercompose.Client) (*Reconciler, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return &Reconciler{
 		configFile: cfg.ConfigFile,
 		stackPath:  cfg.StackPath,

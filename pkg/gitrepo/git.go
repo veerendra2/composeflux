@@ -45,7 +45,6 @@ type FileChange struct {
 type Client interface {
 	Pull(ctx context.Context) ([]FileChange, error)
 	HasUpdates(ctx context.Context) (bool, string, string, error)
-	GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]FileChange, error)
 	Path() string
 }
 
@@ -61,7 +60,7 @@ func (c *client) Pull(ctx context.Context) ([]FileChange, error) {
 	// Capture local HEAD before fetch to compute the diff. In daemon mode,
 	// HasUpdates() advances the remote ref but leaves local HEAD at the old
 	// commit, so this correctly diffs old..new. If local HEAD diverged
-	// (manual checkout, crash), the diff may be misleading but the hard
+	// (manual checkout, crash), the diff may be misleading but the
 	// reset below corrects the state.
 	oldSHA := c.headSHA()
 	err := c.fetch(ctx)
@@ -89,7 +88,11 @@ func (c *client) Pull(ctx context.Context) ([]FileChange, error) {
 		return nil, err
 	}
 
-	if err := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.HardReset}); err != nil {
+	if err := discardLocalChanges(w); err != nil {
+		return nil, err
+	}
+	// MergeReset preserves unrelated untracked files after tracked edits have been discarded.
+	if err := w.Reset(&git.ResetOptions{Commit: remoteRef.Hash(), Mode: git.MergeReset}); err != nil {
 		return nil, fmt.Errorf("failed to reset to %s/%s: %w", remoteName, c.branch, err)
 	}
 
@@ -294,8 +297,36 @@ func checkoutBranch(repo *git.Repository, branch string, auth *ssh.PublicKeys) e
 		options.Hash = remoteRef.Hash()
 		options.Create = true
 	}
+	if err := discardLocalChanges(worktree); err != nil {
+		return err
+	}
 	if err := worktree.Checkout(options); err != nil {
 		return fmt.Errorf("failed to checkout branch %q: %w", branch, err)
+	}
+	return nil
+}
+
+// discardLocalChanges restores changed tracked paths without removing unrelated untracked files.
+func discardLocalChanges(worktree *git.Worktree) error {
+	status, err := worktree.Status()
+	if err != nil {
+		return fmt.Errorf("failed to inspect local git changes: %w", err)
+	}
+	var paths []string
+	for path, file := range status {
+		if file.Staging == git.Untracked || (file.Staging == git.Unmodified && file.Worktree == git.Unmodified) {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	slices.Sort(paths)
+	slog.Warn("Discarding local changes to tracked files; Git is the source of truth", "count", len(paths), "paths", paths)
+	// An unrestricted go-git HardReset also deletes untracked files.
+	if err := worktree.Reset(&git.ResetOptions{Mode: git.HardReset, Files: paths}); err != nil {
+		return fmt.Errorf("failed to discard local git changes: %w", err)
 	}
 	return nil
 }

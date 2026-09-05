@@ -61,6 +61,31 @@ go test -race ./...
 
 ## Coding Instructions & Guidelines
 
+### Agreed Design Decisions
+
+These policies were confirmed with the maintainer during the September 2026 review.
+Preserve them in future changes; do not reopen them unless a new requirement or concrete conflict arises.
+
+- **Keep the implementation small**: Do not change the project folder structure. Split functions only for actual reuse or independently testable logic, not merely to reduce function length. Avoid speculative abstractions and cosmetic refactors.
+- **Failure handling**: An error returned by the initial `GitSync` must fail startup and exit. During periodic reconciliation, log failures, skip the affected work, and keep the daemon running. Existing per-stack warning-and-continue behavior is intentional.
+- **Outcome logging**: Report deployed stacks, deployment failures, load failures, and intentionally skipped stacks separately. Use warning severity when any stack fails. Do not describe a one-shot run with skipped failures as an unconditional success; logging changes must not introduce retries or alter exit behavior.
+- **Retries**: Keep the existing pending-Git retry mechanism for now. Do not add another retry mechanism, retry queue, or persistence layer without explicit approval. The existing optional health-reconciliation policy is unchanged.
+- **Manual recovery is intentional**: A crash after Git updates the checkout but before deployment completes can leave healthy stacks on older configuration. Likewise, an image pull can succeed while deployment fails. Operators may correct the Compose configuration and run `composeflux sync`; do not introduce applied-revision persistence or automatic image-deployment retries to cover these cases.
+- **Git checkout ownership (#54)**: Git is the source of truth. Before startup checkout or upstream reset, discard local changes to tracked files and warn with their paths. Preserve unrelated untracked files; do not add `git clean` or unrestricted go-git `HardReset`/forced checkout. Reset changed tracked paths explicitly, then use normal checkout or `MergeReset` for the target revision. Do not stash, commit, or merge application-written local changes.
+- **Stack configuration failures**: A missing optional `stack.yml` is acceptable. A malformed or unreadable existing file must stop that reconciliation pass rather than substitute empty environment variables or startup order. Initial-sync errors exit; periodic errors are logged without exiting.
+- **Infisical partial results**: Keep successful paths when another configured secret path fails, and log a warning for each failed path. Fail if every path fails. This best-effort policy is intentional.
+- **Suspension source of truth**: Read `composeflux.health.suspend=true` from the loaded Git Compose project, not from stale running-container labels. Any active service with that label suspends the entire stack: skip Git deployment (including force sync), health recovery, and image updates. Suspend also blocks the entire periodic Docker resource-prune pass.
+- **Suspension lifecycle**: Adding the label in Git does not require redeploying it onto running containers. Removing the label in Git resumes management once the change is pulled. Deleting the stack from Git explicitly requests removal, so `PruneStacks` still removes it even if its old containers carry a suspension label.
+- **Dependency boundaries**: Retain missing in-repository bind sources so Git deletions of a file or directory contents still match. Do not start tracking external host paths. Directory-secret caching must avoid repeated decryption while reapplying cached values to every source-load environment that visits that directory.
+- **Validate before side effects**: Require `GIT_INTERVAL > 0`, nonnegative optional health/prune intervals, and a valid nonempty image-update cron expression before initializing clients.
+- **Project identity**: Reject loaded projects whose Compose name differs from the stack directory name, before building or deploying them. Custom names are not a supported feature. Do not add automatic renaming or custom-name support as a cleanup.
+- **Cron lifecycle**: Skip overlapping image-update jobs with the existing cron wrapper and wait for active jobs before returning from `Run` and closing clients. Recheck cancellation after acquiring the reconciliation mutex, before starting image-update work. Waiting may delay shutdown if a provider call is stuck; a timeout must not close a native client still in use.
+- **SDK cancellation limits**: Bitwarden calls do not accept a context. The pinned Infisical v0.8.0 constructor context controls token-refresh lifecycle, not individual secret HTTP requests. Do not claim that passing a context to the constructor enforces request deadlines, or wrap blocking SDK calls in abandoned goroutines.
+- **Tests are deferred**: Do not add test cases until the maintainer explicitly resumes that work. Continue using the existing formatting, vet, lint, and build tooling for code changes.
+
+Build-argument dependency tracking is explicitly deferred to [issue #74](https://github.com/veerendra2/composeflux/issues/74);
+do not implement it as part of the current cleanup. Remote-request timeout changes still require implementation approval.
+
 ### Implementation Principles
 
 - **Surgical & Simple**: Keep diffs minimal, concise, readable, and production-ready. Avoid unneeded abstractions, interfaces with single implementations, or premature options/scaffolding.

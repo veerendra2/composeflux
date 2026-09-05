@@ -210,6 +210,8 @@ func buildStackDependencies(repoPath string, project *types.Project, extraFiles,
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				slog.Warn("Dependency path does not exist", "stack_name", project.Name, "path", path)
+				// Before the pull, a missing bind source may have been a file or a directory.
+				dependencies.directoryPaths = append(dependencies.directoryPaths, path)
 			}
 			continue
 		}

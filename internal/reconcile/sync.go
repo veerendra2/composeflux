@@ -88,7 +88,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		sharedSecretDir = stackRoot
 	}
 
-	toDeploy, err := r.selectStacks(ctx, composeCfgs, syncState{
+	toDeploy, loadFailures, err := r.selectStacks(ctx, composeCfgs, syncState{
 		repoPath:          repoPath,
 		configFile:        configFile,
 		currentStacks:     currentStacks,
@@ -100,9 +100,20 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		retryStacks:       pending.retryStacks,
 	})
 	if err != nil {
+		slog.Warn("Stack selection aborted, no deployments attempted", "load_failed", loadFailures, "error", err)
 		return err
 	}
 	failedStacks, err := r.deployStacks(ctx, toDeploy, deploymentOrder(toDeploy, startupOrder))
+	level := slog.LevelInfo
+	if loadFailures > 0 || len(failedStacks) > 0 {
+		level = slog.LevelWarn
+	}
+	slog.Log(ctx, level, "Stack deployment summary",
+		"deployed", len(toDeploy)-len(failedStacks),
+		"deploy_failed", len(failedStacks),
+		"load_failed", loadFailures,
+		"skipped", len(composeCfgs)-len(toDeploy)-loadFailures,
+	)
 	pending.changes = nil
 	pending.force = false
 	pending.retryStacks = failedStacks
@@ -130,15 +141,22 @@ func (r *Reconciler) selectStacks(
 	ctx context.Context,
 	composeCfgs []dockercompose.ComposeConfig,
 	state syncState,
-) (map[string]loadedStack, error) {
+) (map[string]loadedStack, int, error) {
 	selected := make(map[string]loadedStack)
+	loadFailures := 0
 	for _, composeCfg := range composeCfgs {
 		loaded, err := r.loadProjectWithSecrets(ctx, state.repoPath, composeCfg, state.sharedSecrets)
 		if err != nil {
+			loadFailures++
 			if errors.Is(err, errLocalSecrets) {
-				return nil, err
+				return nil, loadFailures, err
 			}
 			slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
+			continue
+		}
+
+		if hasProjectLabel(loaded.project, LabelSuspend) {
+			slog.Debug("Skipping suspended stack", "stack_name", loaded.project.Name)
 			continue
 		}
 
@@ -156,10 +174,6 @@ func (r *Reconciler) selectStacks(
 		}
 
 		stackInfo, exists := state.currentStacks[loaded.project.Name]
-		if exists && stackInfo.Suspend {
-			slog.Debug("Skipping suspended stack", "stack_name", loaded.project.Name)
-			continue
-		}
 
 		retryBuild, retry := state.retryStacks[loaded.project.Name]
 		impact := changeImpact{}
@@ -196,14 +210,13 @@ func (r *Reconciler) selectStacks(
 				slog.Info("Changed stack detected", "stack_name", loaded.project.Name)
 				impact.deploy = true
 				impact.build = impact.build || changedImpact.build
-				impact.matches = append(impact.matches, changedImpact.matches...)
 			}
 		}
 		if impact.deploy {
 			selected[loaded.project.Name] = loadedStack{project: loaded.project, build: impact.build}
 		}
 	}
-	return selected, nil
+	return selected, loadFailures, nil
 }
 
 // deployStacks builds and deploys selected stacks, returning failed stacks for targeted retries.

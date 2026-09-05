@@ -27,7 +27,6 @@ type StackStateMap map[string]StackInfo
 
 type StackInfo struct {
 	Healthy bool
-	Suspend bool
 }
 
 // buildComposeConfig discovers the primary and override Compose files in a stack directory.
@@ -63,7 +62,7 @@ func discoverComposeStacks(stackRoot string, env []string) ([]dockercompose.Comp
 	return stacks, nil
 }
 
-// getStackStates reports health and suspension state for managed Docker Compose stacks.
+// getStackStates reports health for managed Docker Compose stacks.
 func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) {
 	states := make(StackStateMap)
 	stacks, err := r.dClient.List(ctx)
@@ -85,9 +84,6 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 			if !isContainerHealthy(container) {
 				slog.Debug("Container is not healthy", "stack_name", stack.Name, "container", container.Name, "exit_code", container.ExitCode, "status", container.State, "container_health", container.Health)
 				info.Healthy = false
-			}
-			if container.Labels[LabelSuspend] == ValueTrue {
-				info.Suspend = true
 			}
 		}
 		states[stack.Name] = info

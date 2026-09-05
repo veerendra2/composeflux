@@ -29,7 +29,6 @@ type Client interface {
 	List(ctx context.Context) ([]api.Stack, error)
 	Ps(ctx context.Context, projectName string) ([]api.ContainerSummary, error)
 	Pull(ctx context.Context, project *types.Project) error
-	Restart(ctx context.Context, projectName string) error
 	Up(ctx context.Context, project *types.Project) error
 
 	Prune(ctx context.Context)
@@ -109,11 +108,6 @@ func (c *client) Pull(ctx context.Context, project *types.Project) error {
 	return c.compose.Pull(ctx, project, api.PullOptions{
 		Quiet: true,
 	})
-}
-
-// Restart restarts every service in a Compose project.
-func (c *client) Restart(ctx context.Context, projectName string) error {
-	return c.compose.Restart(ctx, projectName, api.RestartOptions{})
 }
 
 // Up creates and starts a project while reconciling diverged resources.

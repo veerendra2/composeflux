@@ -23,7 +23,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 	var toReconcile []string
 
 	for stackName, status := range stackStatuses {
-		if !status.Healthy && !status.Suspend {
+		if !status.Healthy {
 			toReconcile = append(toReconcile, stackName)
 		}
 	}
@@ -83,6 +83,11 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 				}
 				r.healthFailCounts[stackName]++
 				slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
+				continue
+			}
+
+			if hasProjectLabel(loaded.project, LabelSuspend) {
+				slog.Debug("Skipping suspended stack", "stack_name", loaded.project.Name)
 				continue
 			}
 
