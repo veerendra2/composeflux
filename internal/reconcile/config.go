@@ -9,19 +9,19 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
-type StackConfig struct {
+type stackConfig struct {
 	StartupOrder []string          `yaml:"startup_order"`
 	Envs         map[string]string `yaml:"envs"`
 }
 
-// Load reads and parses a stack configuration file.
-func Load(path string) (*StackConfig, error) {
+// load reads and parses a stack configuration file.
+func load(path string) (*stackConfig, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg StackConfig
+	var cfg stackConfig
 	if err := yaml.Unmarshal(content, &cfg); err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (r *Reconciler) loadStackConfig(stackRoot string) ([]string, []string, stri
 	if err != nil {
 		return nil, nil, "", err
 	}
-	cfg, err := Load(configPath)
+	cfg, err := load(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil, configPath, nil

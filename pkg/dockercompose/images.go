@@ -85,8 +85,7 @@ func (c *client) registryAuth(named reference.Named) string {
 // containsDigest reports whether any local repository digest matches the remote manifest.
 func containsDigest(repoDigests []string, remoteDigest string) bool {
 	for _, repoDigest := range repoDigests {
-		parts := strings.SplitN(repoDigest, "@", 2)
-		if len(parts) == 2 && parts[1] == remoteDigest {
+		if strings.HasSuffix(repoDigest, "@"+remoteDigest) {
 			return true
 		}
 	}

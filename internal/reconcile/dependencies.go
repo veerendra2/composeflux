@@ -19,6 +19,7 @@ type dependencyPaths struct {
 	filePaths     []string
 	bindPaths     []string
 	buildContexts []string
+	dockerfiles   map[string]struct{}
 	optionalFiles map[string]struct{}
 }
 
@@ -86,6 +87,7 @@ func projectDependencyPaths(project *types.Project) dependencyPaths {
 	filePaths := make(map[string]struct{})
 	bindPaths := make(map[string]struct{})
 	buildContexts := make(map[string]struct{})
+	dockerfiles := make(map[string]struct{})
 	optionalFiles := make(map[string]struct{})
 	addPath := func(paths map[string]struct{}, path string) string {
 		if path == "" {
@@ -136,9 +138,11 @@ func projectDependencyPaths(project *types.Project) dependencyPaths {
 				dockerfile = "Dockerfile"
 			}
 			if filepath.IsAbs(dockerfile) {
+				dockerfiles[filepath.Clean(dockerfile)] = struct{}{}
 				addPath(filePaths, dockerfile)
 			} else {
-				addPath(filePaths, filepath.Join(service.Build.Context, dockerfile))
+				dockerfile = filepath.Join(service.Build.Context, dockerfile)
+				dockerfiles[filepath.Clean(addPath(filePaths, dockerfile))] = struct{}{}
 			}
 		}
 	}
@@ -147,6 +151,7 @@ func projectDependencyPaths(project *types.Project) dependencyPaths {
 		filePaths:     slices.Collect(maps.Keys(filePaths)),
 		bindPaths:     slices.Collect(maps.Keys(bindPaths)),
 		buildContexts: slices.Collect(maps.Keys(buildContexts)),
+		dockerfiles:   dockerfiles,
 		optionalFiles: optionalFiles,
 	}
 }
@@ -164,22 +169,8 @@ func buildStackDependencies(repoPath string, project *types.Project, extraFiles,
 	for _, dir := range localSecretDirs {
 		dependencies.localSecretDirs[filepath.Clean(dir)] = struct{}{}
 	}
-	for _, service := range project.Services {
-		if service.Build == nil || service.Build.DockerfileInline != "" {
-			continue
-		}
-		contextDir := service.Build.Context
-		if !filepath.IsAbs(contextDir) {
-			contextDir = filepath.Join(project.WorkingDir, contextDir)
-		}
-		dockerfile := service.Build.Dockerfile
-		if dockerfile == "" {
-			dockerfile = "Dockerfile"
-		}
-		if !filepath.IsAbs(dockerfile) {
-			dockerfile = filepath.Join(contextDir, dockerfile)
-		}
-		dependencies.dockerfiles[filepath.Clean(dockerfile)] = struct{}{}
+	for dockerfile := range paths.dockerfiles {
+		dependencies.dockerfiles[dockerfile] = struct{}{}
 	}
 
 	defaultEnvPath := filepath.Join(project.WorkingDir, ".env")

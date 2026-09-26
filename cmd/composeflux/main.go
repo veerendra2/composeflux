@@ -31,8 +31,6 @@ func main() {
 			"version": version.Version,
 		},
 	)
-	ctx.FatalIfErrorf(ctx.Error)
-
 	slog.SetDefault(slogger.New(cli.Log))
 
 	ctx.FatalIfErrorf(ctx.Run())

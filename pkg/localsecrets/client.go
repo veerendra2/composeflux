@@ -1,7 +1,5 @@
 package localsecrets
 
-import "fmt"
-
 type Config struct {
 	Age AgeConfig `embed:"" prefix:"age-" envprefix:"AGE_" group:"Age Options:"`
 }
@@ -13,28 +11,19 @@ type Client interface {
 	IsSecretFile(path string) bool
 }
 
-// Provider returns the configured local secrets provider.
-func (c Config) Provider() (string, error) {
+// Provider returns the configured local secrets provider ("" when disabled).
+func (c Config) Provider() string {
 	if c.Age.configured() {
-		return "age", nil
+		return "age"
 	}
-	return "", nil
+	return ""
 }
 
 // New creates the configured local secrets client.
 // It returns nil, nil when local secrets are disabled.
 func New(cfg Config) (Client, error) {
-	provider, err := cfg.Provider()
-	if err != nil {
-		return nil, err
-	}
-
-	switch provider {
-	case "":
+	if !cfg.Age.configured() {
 		return nil, nil
-	case "age":
-		return newAgeClient(cfg.Age.Passphrase)
-	default:
-		return nil, fmt.Errorf("unsupported local secrets provider: %s", provider)
 	}
+	return newAgeClient(cfg.Age.Passphrase)
 }

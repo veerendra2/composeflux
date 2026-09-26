@@ -77,7 +77,7 @@ func (c *client) Pull(ctx context.Context) ([]FileChange, error) {
 
 	var changedFiles []FileChange
 	if oldSHA != "" && oldSHA != newSHA {
-		changedFiles, err = c.GetChangedFiles(ctx, oldSHA, newSHA)
+		changedFiles, err = c.getChangedFiles(ctx, oldSHA, newSHA)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute git diff file list (%s..%s): %w", shortSHA(oldSHA), shortSHA(newSHA), err)
 		}
@@ -99,8 +99,8 @@ func (c *client) Pull(ctx context.Context) ([]FileChange, error) {
 	return changedFiles, nil
 }
 
-// GetChangedFiles compares two commit SHAs and returns created, updated, or deleted files.
-func (c *client) GetChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]FileChange, error) {
+// getChangedFiles compares two commit SHAs and returns created, updated, or deleted files.
+func (c *client) getChangedFiles(ctx context.Context, oldSHA, newSHA string) ([]FileChange, error) {
 	if oldSHA == "" || newSHA == "" || oldSHA == newSHA {
 		return nil, nil
 	}

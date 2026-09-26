@@ -40,10 +40,7 @@ func (c *CommonConfig) InitClients(ctx context.Context) (*reconcile.Reconciler, 
 	if err != nil {
 		return nil, nil, err
 	}
-	localProvider, err := c.LocalSecrets.Provider()
-	if err != nil {
-		return nil, nil, err
-	}
+	localProvider := c.LocalSecrets.Provider()
 
 	rClient, err := remotesecrets.New(ctx, c.RemoteSecrets)
 	if err != nil {
