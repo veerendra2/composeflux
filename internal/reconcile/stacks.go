@@ -50,7 +50,7 @@ func discoverComposeStacks(stackRoot string, env []string) ([]dockercompose.Comp
 		stackDir := filepath.Join(stackRoot, entry.Name())
 		composeCfg, err := buildComposeConfig(stackDir, env)
 		if err != nil {
-			slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", entry.Name(), "error", err)
+			slog.Warn("Ignoring directory without valid compose files", "stack_name", entry.Name(), "error", err)
 			continue
 		}
 		stacks = append(stacks, composeCfg)
@@ -68,7 +68,7 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 	for _, stack := range stacks {
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
+			slog.Warn("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			continue
 		}
 		if !isManagedStack(containers) {

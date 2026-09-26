@@ -125,12 +125,12 @@ func (c *CommonConfig) writeDeployKey(client remotesecrets.Client) error {
 
 	sshDir := filepath.Dir(c.Source.SSHKeyPath)
 	if err := os.MkdirAll(sshDir, 0700); err != nil {
-		slog.Error("Unable to create ssh directory", "path", sshDir, "error", err)
+		slog.Error("Failed to create ssh directory", "path", sshDir, "error", err)
 		return err
 	}
 	_ = os.Remove(c.Source.SSHKeyPath)
 	if err := os.WriteFile(c.Source.SSHKeyPath, []byte(content), 0600); err != nil {
-		slog.Error("Unable to write ssh deploy key content to file", "path", c.Source.SSHKeyPath, "error", err)
+		slog.Error("Failed to write ssh deploy key content to file", "path", c.Source.SSHKeyPath, "error", err)
 		return err
 	}
 

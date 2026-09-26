@@ -26,7 +26,7 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 
 	composeCfgs, err := discoverComposeStacks(stackRoot, globalEnvs)
 	if err != nil {
-		slog.Error("Failed to discover compose stacks for image update check", "error", err)
+		slog.Warn("Failed to discover compose stacks for image update check", "error", err)
 		return err
 	}
 
@@ -41,16 +41,16 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 			if errors.Is(err, errLocalSecrets) {
 				return err
 			}
-			slog.Warn("Skipping stack, failed to load project for image check", "path", composeCfg.WorkingDir, "error", err)
+			slog.Warn("Skipping stack, failed to load project for image check", "stack_path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
 		if hasProjectLabel(loaded.project, LabelSuspend) {
-			slog.Info("Stack is suspended, skipping image updates", "stack_name", loaded.project.Name)
+			slog.Debug("Stack is suspended, skipping image updates", "stack_name", loaded.project.Name)
 			continue
 		}
 		if hasProjectLabel(loaded.project, LabelImageUpdateExclude) {
-			slog.Info("Stack has image update excluded, skipping", "stack_name", loaded.project.Name)
+			slog.Debug("Stack has image update excluded, skipping", "stack_name", loaded.project.Name)
 			continue
 		}
 

@@ -30,12 +30,12 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 		if err != nil {
 			type notFound interface{ NotFound() }
 			if _, ok := err.(notFound); !ok {
-				slog.Warn("Failed to inspect image, skipping", "stack", project.Name, "service", svc.Name, "image", svc.Image, "error", err)
+				slog.Warn("Failed to inspect image, skipping", "stack_name", project.Name, "service", svc.Name, "image", svc.Image, "error", err)
 				continue
 			}
 			// Image not present locally — treat as needs update; compose up will pull it
 			slog.Debug("Image not found locally, treating as update needed",
-				"stack", project.Name, "service", svc.Name, "image", svc.Image)
+				"stack_name", project.Name, "service", svc.Name, "image", svc.Image)
 			return true, nil
 		}
 
@@ -53,13 +53,13 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 			EncodedRegistryAuth: encodedAuth,
 		})
 		if err != nil {
-			slog.Warn("Failed to fetch remote manifest, skipping service", "image", svc.Image, "error", err)
+			slog.Warn("Failed to fetch remote manifest, skipping service", "stack_name", project.Name, "service", svc.Name, "image", svc.Image, "error", err)
 			continue
 		}
 
 		remoteDigest := remoteDist.Descriptor.Digest.String()
 		if !containsDigest(localInfo.RepoDigests, remoteDigest) {
-			slog.Info("Image update available", "stack", project.Name, "service", svc.Name, "image", svc.Image)
+			slog.Info("Image update available", "stack_name", project.Name, "service", svc.Name, "image", svc.Image)
 			slog.Debug("Image digest mismatch", "image", svc.Image,
 				"local_digests", localInfo.RepoDigests, "remote_digest", remoteDigest)
 			return true, nil

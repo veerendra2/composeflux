@@ -152,7 +152,7 @@ func (r *Reconciler) selectStacks(
 			if errors.Is(err, errLocalSecrets) {
 				return nil, loadFailures, err
 			}
-			slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
+			slog.Warn("Skipping, failed to load project with secrets", "stack_path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
@@ -238,12 +238,12 @@ func (r *Reconciler) deployStacks(ctx context.Context, stacks map[string]loadedS
 			}
 		}
 		if err := r.Deploy(ctx, stack.project); err != nil {
-			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
+			slog.Warn("Failed to deploy stack", "stack_name", name, "error", err)
 			failedStacks[name] = false
 			deployErrors = append(deployErrors, fmt.Errorf("failed to deploy stack %s: %w", name, err))
 			continue
 		}
-		slog.Info("Successfully deployed the stack", "stack_name", name)
+		slog.Info("Successfully deployed stack", "stack_name", name)
 	}
 	return failedStacks, errors.Join(deployErrors...)
 }
