@@ -26,7 +26,6 @@ func (r *Reconciler) UpdateImages(ctx context.Context) error {
 
 	composeCfgs, err := discoverComposeStacks(stackRoot, globalEnvs)
 	if err != nil {
-		slog.Warn("Failed to discover compose stacks for image update check", "error", err)
 		return err
 	}
 
