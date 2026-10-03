@@ -47,7 +47,7 @@ func (r *Reconciler) Run(ctx context.Context) error {
 			defer cancel()
 			slog.Debug("Running image update check", "cron", r.imageUpdateSchedule)
 			if err := r.UpdateImages(imageCtx); err != nil {
-				slog.Error("Failed to sync image updates", "error", err)
+				slog.Error("Image update check failed", "error", err)
 			}
 		}); err != nil {
 			slog.Error("Invalid image update cron schedule, image updates disabled", "cron", r.imageUpdateSchedule, "error", err)

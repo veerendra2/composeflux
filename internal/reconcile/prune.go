@@ -91,7 +91,7 @@ func (r *Reconciler) PruneStacks(ctx context.Context, srcStack []dockercompose.C
 
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
+			slog.Warn("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			pruneErrors = append(pruneErrors, fmt.Errorf("failed to list containers for stack %s: %w", stack.Name, err))
 			continue
 		}

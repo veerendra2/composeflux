@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/types"
@@ -23,7 +22,7 @@ type loadedStack struct {
 }
 
 type pendingGitSync struct {
-	changes     []gitrepo.FileChange
+	changes     map[string]gitrepo.ChangeAction
 	force       bool
 	retryStacks map[string]bool
 }
@@ -47,7 +46,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	defer r.reconcileMu.Unlock()
 
 	if r.pendingGitSync == nil {
-		r.pendingGitSync = &pendingGitSync{force: force}
+		r.pendingGitSync = &pendingGitSync{changes: make(map[string]gitrepo.ChangeAction), force: force}
 	} else {
 		r.pendingGitSync.force = r.pendingGitSync.force || force
 		slog.Debug("Retrying pending Git reconciliation", "changed_files", len(r.pendingGitSync.changes), "force", r.pendingGitSync.force)
@@ -57,7 +56,9 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	pending.changes = mergeFileChanges(pending.changes, changedFiles)
+	for _, change := range changedFiles {
+		pending.changes[change.Path] = change.Action
+	}
 
 	repoPath, stackRoot, err := r.sourceRoots()
 	if err != nil {
@@ -114,7 +115,7 @@ func (r *Reconciler) GitSync(ctx context.Context, force bool) error {
 		"load_failed", loadFailures,
 		"skipped", len(composeCfgs)-len(toDeploy)-loadFailures,
 	)
-	pending.changes = nil
+	clear(pending.changes)
 	pending.force = false
 	pending.retryStacks = failedStacks
 	if err != nil {
@@ -151,7 +152,7 @@ func (r *Reconciler) selectStacks(
 			if errors.Is(err, errLocalSecrets) {
 				return nil, loadFailures, err
 			}
-			slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
+			slog.Warn("Skipping, failed to load project with secrets", "stack_path", composeCfg.WorkingDir, "error", err)
 			continue
 		}
 
@@ -237,12 +238,12 @@ func (r *Reconciler) deployStacks(ctx context.Context, stacks map[string]loadedS
 			}
 		}
 		if err := r.Deploy(ctx, stack.project); err != nil {
-			slog.Warn("Failed to deploy the stack", "stack_name", name, "error", err)
+			slog.Warn("Failed to deploy stack", "stack_name", name, "error", err)
 			failedStacks[name] = false
 			deployErrors = append(deployErrors, fmt.Errorf("failed to deploy stack %s: %w", name, err))
 			continue
 		}
-		slog.Info("Successfully deployed the stack", "stack_name", name)
+		slog.Info("Successfully deployed stack", "stack_name", name)
 	}
 	return failedStacks, errors.Join(deployErrors...)
 }
@@ -265,36 +266,13 @@ func deploymentOrder(stacks map[string]loadedStack, startupOrder []string) []str
 	return order
 }
 
-// absoluteChanges converts repository-relative Git changes into an absolute path map.
-func absoluteChanges(root string, changes []gitrepo.FileChange) map[string]gitrepo.ChangeAction {
+// absoluteChanges converts repository-relative Git change paths into absolute paths.
+func absoluteChanges(root string, changes map[string]gitrepo.ChangeAction) map[string]gitrepo.ChangeAction {
 	absolute := make(map[string]gitrepo.ChangeAction, len(changes))
-	for _, change := range changes {
-		absolute[filepath.Clean(filepath.Join(root, change.Path))] = change.Action
+	for path, action := range changes {
+		absolute[filepath.Clean(filepath.Join(root, path))] = action
 	}
 	return absolute
-}
-
-// mergeFileChanges coalesces pending and newly pulled changes by path, keeping the latest action.
-func mergeFileChanges(pending, incoming []gitrepo.FileChange) []gitrepo.FileChange {
-	actions := make(map[string]gitrepo.ChangeAction, len(pending)+len(incoming))
-	for _, change := range pending {
-		actions[change.Path] = change.Action
-	}
-	for _, change := range incoming {
-		actions[change.Path] = change.Action
-	}
-
-	paths := make([]string, 0, len(actions))
-	for path := range actions {
-		paths = append(paths, path)
-	}
-	slices.Sort(paths)
-
-	changes := make([]gitrepo.FileChange, 0, len(paths))
-	for _, path := range paths {
-		changes = append(changes, gitrepo.FileChange{Path: path, Action: actions[path]})
-	}
-	return changes
 }
 
 // warnMissingStartupOrder reports configured startup entries without source directories.

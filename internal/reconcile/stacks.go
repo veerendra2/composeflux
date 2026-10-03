@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/docker/compose/v5/pkg/api"
 
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
@@ -18,11 +19,6 @@ const (
 	Unhealthy    = "unhealthy"
 )
 
-var (
-	defaultFileNames         = []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
-	defaultOverrideFileNames = []string{"compose.override.yml", "compose.override.yaml", "docker-compose.override.yml", "docker-compose.override.yaml"}
-)
-
 type StackStateMap map[string]StackInfo
 
 type StackInfo struct {
@@ -31,11 +27,11 @@ type StackInfo struct {
 
 // buildComposeConfig discovers the primary and override Compose files in a stack directory.
 func buildComposeConfig(dir string, env []string) (dockercompose.ComposeConfig, error) {
-	composeFiles := findExistingFiles(dir, defaultFileNames)
+	composeFiles := findExistingFiles(dir, cli.DefaultFileNames)
 	if len(composeFiles) == 0 {
 		return dockercompose.ComposeConfig{}, fmt.Errorf("no compose files found in directory %s", dir)
 	}
-	composeFiles = append(composeFiles, findExistingFiles(dir, defaultOverrideFileNames)...)
+	composeFiles = append(composeFiles, findExistingFiles(dir, cli.DefaultOverrideFileNames)...)
 	return dockercompose.ComposeConfig{ComposeFiles: composeFiles, WorkingDir: dir, Env: env}, nil
 }
 
@@ -54,7 +50,7 @@ func discoverComposeStacks(stackRoot string, env []string) ([]dockercompose.Comp
 		stackDir := filepath.Join(stackRoot, entry.Name())
 		composeCfg, err := buildComposeConfig(stackDir, env)
 		if err != nil {
-			slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", entry.Name(), "error", err)
+			slog.Warn("Ignoring directory without valid compose files", "stack_name", entry.Name(), "error", err)
 			continue
 		}
 		stacks = append(stacks, composeCfg)
@@ -72,7 +68,7 @@ func (r *Reconciler) getStackStates(ctx context.Context) (StackStateMap, error) 
 	for _, stack := range stacks {
 		containers, err := r.dClient.Ps(ctx, stack.Name)
 		if err != nil {
-			slog.Error("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
+			slog.Warn("Failed to list containers for stack", "stack_name", stack.Name, "error", err)
 			continue
 		}
 		if !isManagedStack(containers) {

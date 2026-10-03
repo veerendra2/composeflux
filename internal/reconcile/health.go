@@ -72,7 +72,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 			composeCfg, err := buildComposeConfig(stackPath, globalEnvs)
 			if err != nil {
 				r.healthFailCounts[stackName]++
-				slog.Warn("Ignoring directory without valid compose files", "stack_dir_name", stackName, "error", err)
+				slog.Warn("Ignoring directory without valid compose files", "stack_name", stackName, "error", err)
 				continue
 			}
 
@@ -82,7 +82,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 					return err
 				}
 				r.healthFailCounts[stackName]++
-				slog.Warn("Skipping, failed to load project with secrets", "path", composeCfg.WorkingDir, "error", err)
+				slog.Warn("Skipping, failed to load project with secrets", "stack_path", composeCfg.WorkingDir, "error", err)
 				continue
 			}
 
@@ -93,7 +93,7 @@ func (r *Reconciler) ReconcileHealth(ctx context.Context) error {
 
 			if err := r.Deploy(ctx, loaded.project); err != nil {
 				r.healthFailCounts[stackName]++
-				slog.Warn("Failed to deploy the stack", "stack_name", stackName,
+				slog.Warn("Failed to deploy stack", "stack_name", stackName,
 					"attempt", r.healthFailCounts[stackName], "error", err)
 				continue
 			}
