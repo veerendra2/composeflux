@@ -1,5 +1,13 @@
 # Development Guide
 
+## Architecture
+
+This Architecture diagram is generated from [Git diagram](https://gitdiagram.com/veerendra2/composeflux)
+
+![Architecture diagram](./assets/arch-diagram.png)
+
+[![Architecture diagram of veerendra2/composeflux](https://gitdiagram.com/veerendra2/composeflux/diagram.png)](https://gitdiagram.com/veerendra2/composeflux?utm_source=readme&utm_medium=picture)
+
 ## Prerequisites
 
 - Go 1.27+

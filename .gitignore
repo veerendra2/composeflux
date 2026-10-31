@@ -36,3 +36,6 @@ dist/.claude/
 
 .claude
 docs/superpowers/
+dist
+.codegraph
+site

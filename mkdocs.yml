@@ -4,6 +4,7 @@ site_url: https://veerendra2.github.io/composeflux/
 
 exclude_docs: |
   internal/
+  superpowers/
 
 theme:
   name: material
@@ -14,14 +15,14 @@ theme:
 
 nav:
   - Home: index.md
-  - Introduction: Introduction.md
+  - Overview: Overview.md
   - Getting Started: GettingStarted.md
+  - Guides:
+      - Offline Secrets (Age): how-to-guides/AgeSecrets.md
+      - Bitwarden Secrets Manager: how-to-guides/Bitwarden.md
+      - Infisical Secrets Manager: how-to-guides/Infisical.md
+      - GitHub Deploy Keys: how-to-guides/GithubDeployKeys.md
   - Development: Development.md
-  - How-to Guides:
-      - Age Encrypted Secrets Setup: how-to-guides/AgeSecrets.md
-      - Bitwarden Secrets Manager Setup: how-to-guides/Bitwarden.md
-      - Infisical Secrets Manager Setup: how-to-guides/Infisical.md
-      - GitHub Deploy Keys Setup: how-to-guides/GithubDeployKeys.md
 
 markdown_extensions:
   - admonition

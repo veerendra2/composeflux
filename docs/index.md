@@ -1,34 +1,27 @@
-# ComposeFlux
-
-_A GitOps continuous deployment tool for Docker Compose_
-
-![ComposeFlux](./assets/composeflux-banner.png)
-
 <p align="center">
-<img src="https://img.shields.io/github/go-mod/go-version/veerendra2/composeflux?style=flat&logo=go&logoColor=white" alt="Go">
-<img src="https://img.shields.io/github/license/veerendra2/composeflux?style=flat" alt="License">
-<img src="https://img.shields.io/github/stars/veerendra2/composeflux?style=flat&logo=github" alt="Stars">
-<img src="https://img.shields.io/github/forks/veerendra2/composeflux?style=flat&logo=github" alt="Forks">
-<a href="https://github.com/veerendra2/composeflux/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/veerendra2/composeflux/ci.yml?style=flat&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
-<a href="https://github.com/veerendra2/composeflux/releases/latest"><img src="https://img.shields.io/github/v/release/veerendra2/composeflux?style=flat&logo=github" alt="Release"></a>
-<a href="https://ghcr.io/veerendra2/composeflux"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64-blue?style=flat&logo=docker&logoColor=white" alt="Docker"></a>
-<a href="https://github.com/veerendra2/composeflux"><img src="https://img.shields.io/badge/GitHub-Repository-blue?style=flat&logo=github" alt="GitHub"></a>
+  <img src="./assets/composeflux-banner.png" alt="ComposeFlux" width="400">
 </p>
 
-ComposeFlux automates Docker Compose deployments using GitOps principles. Monitor your Git repository, detect changes,
-and automatically deploy your Docker stacks—all without manual intervention.
+<p align="center">
+  <strong>A lightweight GitOps continuous deployment tool for Docker Compose.</strong>
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/veerendra2/composeflux">GitHub Repository</a>
+</p>
+
+ComposeFlux automates Docker Compose deployments using GitOps principles. It watches a Git repository, detects changes,
+and deploys the affected stacks without manual intervention.
 
 ## Features
 
 | Feature | Description |
-| ------- | ----------- |
-| GitOps Driven | Automatic deployment from Git repository |
-| Change Detection | Git diff & dependency-tree detection deploys only affected stacks |
-| Pure Go Implementation | Native Docker Compose SDK without shell execution |
-| Offline Secrets (Age) | Encrypted `*.age` secret files in Git repos decrypted in-memory via passphrase |
-| Remote Secrets Providers | Optional Bitwarden Secrets Manager and Infisical support |
-| Automatic Image Updates | Scheduled registry checks redeploy stacks when newer images are available |
-| Flexible Configuration | Startup order and shared environment variables |
-| Simple & Headless | No UI, no backend database |
+| --- | --- |
+| GitOps driven | Deployments follow the Git repository |
+| Change detection | Only stacks affected by a commit are redeployed |
+| Lightweight and headless | Single container, no UI, no database, no control plane |
+| Pure Go implementation | Native Docker Compose SDK, no shell execution |
+| Offline secrets | `*.age` files in the repository are decrypted in memory |
+| Remote secrets | Optional Bitwarden Secrets Manager and Infisical support |
+| Automatic image updates | Scheduled registry checks redeploy stacks when newer images are available |
+| Flexible configuration | Deployment order and shared environment variables |

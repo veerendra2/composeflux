@@ -1,83 +1,67 @@
-# Bitwarden Secrets Manager Setup
+# Bitwarden Secrets Manager
 
-Set up Bitwarden Secrets Manager as the secrets provider for ComposeFlux.
+Configure [Bitwarden Secrets Manager](https://bitwarden.com/help/secrets-manager-overview/) as a remote secrets
+provider. ComposeFlux fetches every secret in the configured project and exposes each value under its secret key name.
 
-> See [Bitwarden Secrets Manager Overview](https://bitwarden.com/help/secrets-manager-overview/) for product details.
-
-## Steps
-
-### 1. Create a Project
+## 1. Create a project
 
 1. Sign in to Bitwarden.
 2. Open **Secrets Manager**.
-3. Click **New Project**.
-4. Create a project for ComposeFlux secrets.
+3. Click **New Project** and create a project for ComposeFlux.
 
-![Project Creation](../assets/bw-projects.png)
+![Project creation](../assets/bw-projects.png)
 
-### 2. Add Secrets
+## 2. Add secrets
 
-Add secrets to the project.
+Add the keys your stacks reference, for example `DATABASE_URL` or `API_KEY`.
 
-- If you want ComposeFlux to fetch your Git SSH deploy key from Bitwarden at startup, create a secret that stores the
-  private key, then copy that secret's ID for `GIT_DEPLOY_KEY_SECRET_REF`. See
-  [Deploy Key Secret Reference](../GettingStarted.md#deploy-key-secret-reference).
+To fetch the Git deploy key from Bitwarden, create a secret that contains the private key and copy its secret ID. See
+[Store the key in a secrets manager](GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
 
-![Bitwarden Secret Creation](../assets/bw-example-secrets-add.png)
+![Secret creation](../assets/bw-example-secrets-add.png)
 
-- Add any stack secrets you want exposed as environment variables (for example, `DATABASE_URL`, `API_KEY`).
+## 3. Create a machine account
 
-### 3. Create a Machine Account
-
-1. Go to the **Machine Accounts** tab.
+1. Open the **Machine Accounts** tab.
 2. Click **New Machine Account**.
-3. Assign the project you created.
-4. Set permission to **Can read**.
+3. Assign the project created above.
+4. Set the permission to **Can read**.
 5. Click **Save**.
 
-![Machine Account](../assets/bw-machine-account.png)
+![Machine account](../assets/bw-machine-account.png)
 
-### 4. Generate an Access Token
+## 4. Create an access token
 
 1. Open the machine account.
-2. Go to the **Access tokens** tab.
+2. Open the **Access tokens** tab.
 3. Click **Create access token**.
-4. Copy and store the token.
+4. Copy the token and store it securely.
 
-![Token Creation](../assets/bw-token-creation.png)
+![Token creation](../assets/bw-token-creation.png)
 
-### 5. Configuration Checklist
+## 5. Configure ComposeFlux
 
-Make sure you have the following values for ComposeFlux:
+Set the following values. The organization ID, project ID, API URL, and identity URL are shown in the machine account
+configuration.
 
-- **Organization ID**
-- **Project ID**
-- **API URL** (default: `https://vault.bitwarden.com/api`)
-- **Identity URL** (default: `https://vault.bitwarden.com/identity`)
-
-![Config](../assets/bw-machine-account-config.png)
-
-## Environment Variables
-
-Add to your `.env` or compose file:
+![Machine account configuration](../assets/bw-machine-account-config.png)
 
 ```bash
-BITWARDEN_ACCESS_TOKEN=<your-access-token>
-BITWARDEN_ORGANIZATION_ID=<your-org-id>
-BITWARDEN_PROJECT_ID=<your-project-id>
+BITWARDEN_ACCESS_TOKEN=<access-token>
+BITWARDEN_ORGANIZATION_ID=<organization-id>
+BITWARDEN_PROJECT_ID=<project-id>
 
-# Optional: only if fetching SSH deploy key from Bitwarden
-GIT_DEPLOY_KEY_SECRET_REF=<bitwarden-secret-id>
+# Optional: only when fetching the SSH deploy key from Bitwarden
+GIT_DEPLOY_KEY_SECRET_REF=<secret-id>
 
 # Optional: only for self-hosted Bitwarden
 # BITWARDEN_API_URL=https://vault.bitwarden.com/api
 # BITWARDEN_IDENTITY_URL=https://vault.bitwarden.com/identity
 ```
 
-## Usage in Compose Stacks
+## Use the values
 
-ComposeFlux fetches secrets from the configured Bitwarden project and exposes them as environment variables using each
-secret key name.
+Reference the keys in a stack's Compose file:
 
 ```yaml
 services:
@@ -87,3 +71,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       API_KEY: ${API_KEY}
 ```
+
+Keys that are not referenced are not passed to containers. After changing a secret in Bitwarden, run
+`composeflux sync` to apply it.
