@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://veerendra2.github.io/composeflux/Overview/">Overview</a> •
   <a href="https://veerendra2.github.io/composeflux/GettingStarted/">Getting Started</a> •
-  <a href="https://veerendra2.github.io/composeflux/Development/">Architecture</a> •
+  <a href="https://veerendra2.github.io/composeflux/Development/">Development</a> •
   <a href="https://github.com/veerendra2/composeflux/releases">Releases</a>
 </p>
 
