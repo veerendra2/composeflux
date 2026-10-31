@@ -60,6 +60,8 @@ This option requires Bitwarden or Infisical credentials. Set `GIT_DEPLOY_KEY_SEC
 At startup, ComposeFlux fetches the value and writes it to `GIT_SSH_KEY_PATH` with mode `0600`. When the reference is
 empty, ComposeFlux uses the key already present at that path.
 
+Do not also mount the key at `GIT_SSH_KEY_PATH`: a read-only mount makes the write fail at startup.
+
 ```yaml
 environment:
   GIT_REPO_URL: git@github.com:user/repo.git

@@ -45,8 +45,10 @@ During reconciliation, ComposeFlux lists the directories in `STACK_PATH` and loo
 `docker-compose.yml`, or `docker-compose.yaml`, plus a matching override file. Directories without a Compose file are
 ignored. Discovery is one level deep: nested directories are not scanned on their own. A stack can still be
 [modularized or include](https://docs.docker.com/reference/compose-file/include/) another Compose file, provided the
-referenced files are inside the same repository. Remote includes are ignored, and paths that escape the repository are
-rejected.
+referenced files are inside the same repository, where changes to them trigger reconciliation. Remote includes (Git or
+OCI) are passed to Compose when the project is loaded, so they can affect the deployed project, but ComposeFlux does not
+track them: a change to a remote include does not trigger a deployment, and secrets in the remote location are not
+loaded. Paths that escape the repository are rejected.
 
 !!! warning "The project name must match the directory name"
 

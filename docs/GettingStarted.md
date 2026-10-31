@@ -5,6 +5,8 @@ Install ComposeFlux on a Docker host and connect it to a Git repository of Compo
 ## Prerequisites
 
 - A Linux host with Docker Engine and access to the daemon socket at `/var/run/docker.sock`.
+- The Docker Compose plugin on the host that starts ComposeFlux, for the `docker compose` commands in this guide.
+  ComposeFlux itself does not require the plugin at runtime.
 - A Git repository reachable over SSH that contains the Compose stacks.
 - Read access to the repository through an SSH key. The key can be mounted into the container or stored in a supported
   secrets manager.
@@ -49,12 +51,18 @@ The following configuration deploys every stack under `stacks/` in the repositor
     docker compose up -d
     docker compose logs -f
     ```
+
 The mounted key must be readable by the container and must not have a passphrase. The named volume keeps the Git clone
 between restarts. If the initial sync fails, the process exits with the error in the log.
 
 The SSH deploy key can also be fetched from a remote secrets manager (Bitwarden or Infisical) by setting
 `GIT_DEPLOY_KEY_SECRET_REF`. For Bitwarden the value is the secret ID; for Infisical it is the secret key name. See
 [GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
+
+!!! note
+
+    When `GIT_DEPLOY_KEY_SECRET_REF` is set, remove the read-only key mount from the Compose file. ComposeFlux writes
+    the fetched key to `GIT_SSH_KEY_PATH`, and a read-only mount makes that write fail at startup.
 
 ## Deploy with Ansible
 
@@ -63,6 +71,7 @@ same deployment on a target host.
 
 ```bash
 ansible-galaxy role install veerendra2.composeflux_deploy
+ansible-galaxy collection install community.docker   # required by the role
 ```
 
 ```yaml
@@ -231,6 +240,7 @@ services:
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Local key only. Omit when GIT_DEPLOY_KEY_SECRET_REF is set.
       - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
       - compose-stack:/opt/compose-stack
 
