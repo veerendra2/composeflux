@@ -9,7 +9,7 @@ configured project, environment, and paths, and exposes each value under its sec
 2. Open the **Overview** tab.
 3. Click **Add New Project** and create a project for ComposeFlux.
 
-![Create project](../assets/infisical-create-project.png)
+![Adding a new project in Infisical](../assets/infisical-create-project.png)
 
 ## 2. Choose an environment
 
@@ -19,16 +19,16 @@ ComposeFlux uses `INFISICAL_ENVIRONMENT`, so an environment slug is required.
 2. Create or select an environment, for example `prod`.
 3. Note the environment slug.
 
-![Environment slug](../assets/infisical-env-slug.png)
+![Infisical environment slug](../assets/infisical-env-slug.png)
 
 ## 3. Add secrets
 
-Add the keys your stacks reference, for example `DATABASE_PASSWORD` or `API_KEY`.
+Add the keys referenced by the stacks, for example `DATABASE_PASSWORD` or `API_KEY`.
 
 To fetch the Git deploy key from Infisical, create a secret named `SSH_PRIVATE_KEY` and copy the private key content.
 See [Store the key in a secrets manager](GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
 
-![SSH key secret](../assets/infisical-ssh-key.png)
+![Infisical SSH_PRIVATE_KEY secret](../assets/infisical-ssh-key.png)
 
 ## 4. Optional: organize secrets in folders
 
@@ -42,7 +42,7 @@ Use a comma-separated list to read secrets from several folders, for example `/g
 
 A common layout is shared secrets in `/generic` and environment overrides in `/apps/prod`.
 
-![Folders](../assets/infisical-folders.png)
+![Infisical secret folders](../assets/infisical-folders.png)
 
 ## 5. Create a machine identity
 
@@ -50,7 +50,7 @@ A common layout is shared secrets in `/generic` and environment overrides in `/a
 2. Click **Add Machine Identity to Project**.
 3. Enter a name and set the role to **Viewer**.
 
-![Machine identity](../assets/infisical-machine-identity.png)
+![Infisical machine identity with project access](../assets/infisical-machine-identity.png)
 
 ## 6. Create client credentials
 
@@ -59,7 +59,7 @@ A common layout is shared secrets in `/generic` and environment overrides in `/a
 3. Click **Add Client Secrets**.
 4. Copy the client ID and client secret.
 
-![Client secrets](../assets/infisical-client-secrets.png)
+![Infisical Universal Auth client secrets](../assets/infisical-client-secrets.png)
 
 ## 7. Configure ComposeFlux
 
@@ -77,7 +77,7 @@ INFISICAL_PROJECT_ID=<project-id>
 
 The project ID is shown in the project settings.
 
-![Project ID](../assets/infisical-project-id.png)
+![Infisical project ID in the project settings](../assets/infisical-project-id.png)
 
 ## Use the values
 

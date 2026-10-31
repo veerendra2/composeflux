@@ -1,58 +1,62 @@
 # Overview
 
-ComposeFlux is a GitOps continuous deployment tool for Docker Compose, reconciles docker stacks from Git to host
+ComposeFlux is a GitOps continuous deployment tool for Docker Compose. It reconciles Docker stacks on a host from a Git
+repository.
 
 ## Introduction
 
-ComposeFlux reconciles docker stacks under specific path (`STACK_PATH`) in a Git repository using deploy key as
-authentication. As ComposeFlux is standalone and there are no central management or UI or DB, if you want to manage some
-stacks on a host, you deploy ComposeFlux in that host and configure a path (`STACK_PATH`), to tell ComposeFlux deploy
-stacks from that path.
+ComposeFlux reconciles the Docker stacks located under a path (`STACK_PATH`) in a Git repository, authenticating with a
+deploy key. It is standalone: there is no central management service, UI, or database. Managing stacks on a host
+therefore means running ComposeFlux on that host and pointing `STACK_PATH` at the directory that holds those stacks.
 
 ## Structure
 
-You organize your docker compose stacks in organized folders (Ideally per server) with `STACK_PATH`, lets look how to
-organize
+Stacks are organized into directories under `STACK_PATH`, ideally one directory per server.
 
 ### Stack Path
 
-Stack path (`STACK_PATH`) configuration tells ComposeFlux, where to look for stacks, the stacks has to be flat,
-ComposeFlux continues looks for drifts in the directory and reconcile stacks on the path.
+`STACK_PATH` defines where ComposeFlux looks for stacks. The stacks must be flat: ComposeFlux scans that directory for
+drift and reconciles the stacks found in it.
 
-Below image illustrate, multiple standalone ComposeFlux runs on servers pointing same Git repostory with difference
-`STACK_PATH`
+The image below shows multiple standalone ComposeFlux instances running on different servers, all pointing at the same
+Git repository with different `STACK_PATH` values.
 
-![Stack Path Example](assets/composeflux-overview.png)
+![Multiple ComposeFlux instances pointing at different stack paths](assets/composeflux-overview.png)
 
 ### Stacks
 
-A stack is docker compose directory where you put docker compose file and its related configs(or age vault), for example
-below
+A stack is a Docker Compose directory that contains a Compose file and its related configuration, including an optional
+Age vault.
 
 ```
-stacks/                  STACK_PATH
-├── stack.yml            optional shared configuration
+stacks/                     STACK_PATH
+├── stack.yml               optional shared configuration
+├── shared.env.age          optional secrets for every stack
 ├── traefik/
-│   └── compose.yml      optional stack secrets
+│   ├── compose.yml
+│   └── traefik.env.age     optional secrets for this stack
 ├── nextcloud/
 │   └── compose.yml
 └── jellyfin/
     └── docker-compose.yml
 ```
 
-During reconciliation, ComposeFlux lists directories in the `STACK_PATH` and then looks for looks for `compose.yaml`,
-`compose.yml`, `docker-compose.yml`, or `docker-compose.yaml`, plus a matching override file. Directories without a
-Compose file are ignored. Discovery is one level deep; nested directories are not scanned unless compose file
-[modularized or contains include](https://docs.docker.com/reference/compose-file/include/) of other compose file
-different location in the repo
+During reconciliation, ComposeFlux lists the directories in `STACK_PATH` and looks for `compose.yaml`, `compose.yml`,
+`docker-compose.yml`, or `docker-compose.yaml`, plus a matching override file. Directories without a Compose file are
+ignored. Discovery is one level deep: nested directories are not scanned on their own. A stack can still be
+[modularized or include](https://docs.docker.com/reference/compose-file/include/) another Compose file, provided the
+referenced files are inside the same repository. Remote includes are ignored, and paths that escape the repository are
+rejected.
 
-Caveat: Dont set different `name:` in docker compose file other than directory name. ComposeFlux assumes, the directory
-name is the docker compose project name
+!!! warning "The project name must match the directory name"
+
+    Do not set a `name:` in the Compose file that differs from the stack directory name. ComposeFlux treats the
+    directory name as the Compose project name and rejects a project whose resolved name differs.
 
 ## Stack configuration
 
 An optional `stack.yml` in `STACK_PATH` controls deployment order and defines environment variables shared by all
-stacks.
+stacks. The file name is configurable with `CONFIG_FILE` and is resolved relative to `STACK_PATH`.
 
 ```yaml
 startup_order:
@@ -64,32 +68,33 @@ envs:
   ENVIRONMENT: production
 ```
 
-- `startup_order` lists stacks that must deploy first. Other stacks deploy after them in no guaranteed order.
+- `startup_order` lists stacks that must deploy first. The remaining stacks deploy afterwards in no guaranteed order.
 - `envs` are available for Compose interpolation in every stack.
 - Names in `startup_order` must match directory names. Unknown names are reported in the log and skipped.
 - A missing `stack.yml` is allowed. A malformed or unreadable file stops the current reconciliation pass.
 
 ## Background Operations
 
-### Health Reconciliation
+### Health reconciliation
 
-Set `HEALTH_RECONCILE_INTERVAL` to enable periodic health checks (disabled by default). ComposeFlux redeploys any
-managed stack with an unhealthy container. It does not pull Git for this recovery.
+Set `HEALTH_RECONCILE_INTERVAL` to enable periodic health checks; they are disabled by default. When enabled,
+ComposeFlux redeploys any managed stack that contains an unhealthy container. Git is not pulled for this recovery.
 
-A stack is healthy when one of these is true for a container in the stack:
+A container is healthy when either of these is true:
 
-- It is running and its health check is not `unhealthy`.
-- It exited with code `0` and has the `composeflux.init: "true"` label.
+- The container is running and its health status is not `unhealthy`.
+- The container has exited with code `0` and carries the `composeflux.init: "true"` label, which marks a one-shot or
+  init container as an expected exit.
 
-Containers in `restarting`, `paused`, or `dead` state are unhealthy. A stack is unhealthy when any of its containers is
-unhealthy. After three consecutive failed deploys, ComposeFlux stops trying the stack until the next successful Git sync
-or image update.
+Every other state is unhealthy, including `restarting`, `paused`, `dead`, and `exited` without the init label. A stack
+is unhealthy when any of its containers is unhealthy. After three consecutive failed deployments, ComposeFlux stops
+trying the stack until the next successful Git sync or image update.
 
 ### Automatic image updates
 
 Set `IMAGE_UPDATE_SCHEDULE` to a cron expression to check for new images. ComposeFlux compares the local and remote
 image digests for each stack. When a newer digest is available, it pulls the images and redeploys the stack. Images
-built locally or pinned by digest are skipped.
+built locally or pinned by digest are skipped, and an image that is missing locally is treated as needing an update.
 
 Add `composeflux.image-update.exclude: "true"` to any service to exclude the stack. If a scheduled check is still
 running, the next invocation is skipped.
@@ -98,58 +103,61 @@ running, the next invocation is skipped.
 
 `PRUNE_INTERVAL` defaults to `24h`. Set it to `0` to disable pruning.
 
-!!! warning Pruning applies to the whole Docker host, not only to ComposeFlux stacks. It removes all unused volumes, all
-dangling images, and all build cache. Containers and networks are not pruned. Set `PRUNE_INTERVAL=0` if other workloads
-on the host keep unused volumes that must be retained.
+!!! warning "Pruning applies to the whole Docker host"
 
-Pruning runs only when every stack under `STACK_PATH` is healthy, and not suspended. Otherwise the cycle is skipped and
-a warning is logged.
+    Pruning is not limited to ComposeFlux stacks. It removes all unused volumes, all dangling images, and all build
+    cache. Containers and networks are not pruned.
+
+Pruning runs only when every stack under `STACK_PATH` is running in Docker, healthy, and not suspended. Otherwise the
+cycle is skipped and a warning is logged.
 
 ## Secrets
 
-ComposeFlux supports two secret sources. They can be used together.
+ComposeFlux supports two secret sources, which can be used together:
+
+- **Offline secrets**: age-encrypted dotenv files (`*.age`) stored in the Git repository and decrypted in memory.
+- **Remote secrets**: Bitwarden Secrets Manager or Infisical. Only one remote provider can be configured.
 
 ### Offline Secrets
 
-> At the moment, ComposeFlux supports [age](https://github.com/FiloSottile/age) with passphrase only. It can
-> automatically picks .age extention file and decrypts with AGE_PASSPHRASE (--age-passphrase) option
+!!! note
 
-ComposeFlux can exports secrets from env vault file while bring up the docker compose stacks, you can set environmental
-vars in docker compose config to pick up.
+    Only [age](https://github.com/FiloSottile/age) with passphrase encryption is supported. Files with the `.age`
+    extension are discovered automatically and decrypted with `AGE_PASSPHRASE` (`--age-passphrase`).
 
-- If the .age file is inside of the stack directory, the secrets in the vault file belongs to that stack
-- If the .age file is in root of the `STACK_PATH`, it belongs to all stacks in that stack path i.e. shared secrets
+Offline secrets are dotenv files encrypted with a passphrase and committed to the stack repository. During
+reconciliation ComposeFlux discovers the `*.age` files that apply to a stack, decrypts each one in memory, parses it as
+dotenv, and exports the keys as environment variables for Compose interpolation while the stack is brought up.
+Plaintext is never written to disk, and the keys are available to the Compose file for interpolation only.
 
-![Offline Vaults](./assets/offline-secrets.png)
+A `.age` file inside a stack directory provides secrets for that stack. A `.age` file in the root of `STACK_PATH`
+provides secrets for every stack in that stack path, that is, shared secrets.
 
-For example, create
+Create a dotenv file containing the values to encrypt:
 
 ```bash
-cat .env_secrets
 TOKEN=my-token
+```
 
-# Encrypt
+Encrypt it with a passphrase and remove the plaintext file:
+
+```bash
 age -p -o .env.secrets.age .env_secrets
-
-cat .env.secrets.age
-age-encryption.org/v1
--> scrypt zZIcf60TjTWPvmc9fxJyXQ 18
-hbPYsea19K1Wteq4Ysa1DYzP76dfldoMhKahFzxaHc8
---- jPSiPnOjUVYs6LRKpzHFFdavh17X3/ZCv4bsnR0kK6c
-�����^�����8��q�#�n��&��5�o�׋�L9�\/k&�ϐ��
-
 rm .env_secrets
+```
 
-tree -a servers/wg1-ams/wg-easy/
+The encrypted file is kept next to the stack it belongs to:
+
+```
 servers/wg1-ams/wg-easy/
 ├── .env.secrets.age
 ├── compose.override.yml
 └── compose.yml
-
-1 directory, 3 files
 ```
 
-Add env in docker compose file, to docker compose interporate the env
+![Age secret files at the stack root and inside a stack directory](./assets/offline-secrets.png)
+
+The Compose file references the exported keys:
 
 ```yaml
 name: wg-easy
@@ -158,19 +166,22 @@ services:
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy:latest
     environment:
-      TOKEN: ${TOKEN} # <----- ENV from the .env.secrets.age, decrypted and exports while bring up the stack
-...
+      TOKEN: ${TOKEN} # decrypted from the .age vault and exported while bringing up the stack
 ```
 
-See [Offline Secrets with Age](how-to-guides/AgeSecrets.md).
+See [Offline Secrets with Age](how-to-guides/AgeSecrets.md) for the full workflow.
 
 ### Remote secrets
 
-Configure Bitwarden Secrets Manager or Infisical. Only one remote provider can be configured at a time. Values are
-fetched whenever ComposeFlux reconciles a stack. After changing a secret in the provider, run `composeflux sync` to
-apply it.
+!!! note
 
-![ComposeFlux Remote Secrets Manager](./assets/composeflux-secrets-manager.png)
+    Only [Bitwarden Secrets Manager](https://bitwarden.com/help/secrets-manager-overview/) and
+    [Infisical](https://infisical.com/docs) are supported as remote providers.
+
+One remote provider can be configured at a time. Values are fetched whenever ComposeFlux reconciles a stack. After
+changing a secret in the provider, run `composeflux sync` to apply it.
+
+![ComposeFlux fetching secrets from a remote provider](./assets/composeflux-secrets-manager.png)
 
 ComposeFlux does not inject every secret into every container. A value reaches a container only when the Compose service
 references it:
@@ -190,25 +201,28 @@ services:
 
 !!! warning
 
-    Git is the source of truth for the checkout at `GIT_CLONE_PATH`. Before startup checkout and before each sync, ComposeFlux discards local changes to tracked files and logs the affected paths. This includes changes written by containers through bind mounts. Untracked files are preserved, but a file required by the target revision can be replaced. Keep mutable application data outside tracked files.
+    Git is the source of truth for the checkout at `GIT_CLONE_PATH`. Before the startup checkout and before each sync,
+    ComposeFlux discards local changes to tracked files and logs the affected paths. This includes changes written by
+    containers through bind mounts. Untracked files are preserved, but a file required by the target revision can be
+    replaced. Mutable application data must stay outside tracked files.
 
 ## Labels
 
 ComposeFlux adds `composeflux.managed`, `composeflux.version`, and `composeflux.deployed-at` labels to every service
-during deployment. Use the managed label to list stacks:
+during deployment. The managed label can be used to list stacks:
 
 ```bash
 docker ps --filter "label=composeflux.managed=true"
 ```
 
-Along with labels set by ComposeFlux, you can also set labels to docker compose stacks to controll reconcilation
+Besides the labels added by ComposeFlux, services can carry labels that control reconciliation.
 
 ### Suspend
 
 `composeflux.health.suspend`
 
-When you set this label to any service in docker compose file, ComposeFlux ignores reconcilation i.e. no Git deployment,
-health recovery, or image updates, and resource pruning is skipped.
+When this label is set on any service in the Compose file, ComposeFlux stops managing the stack: no Git deployment,
+health recovery, or image updates, and the resource prune cycle is skipped.
 
 Example
 
@@ -229,9 +243,9 @@ services:
 
 `composeflux.init`
 
-When you enable [Health reconciliation](#health-reconciliation), and if you have
-[one short container](https://docs.docker.com/compose/how-tos/init-containers) in docker compose stack, to make
-ComposeFlux aware of this one-short container and prevent thinks container is down, you can add this label
+When [health reconciliation](#health-reconciliation) is enabled, a
+[one-shot container](https://docs.docker.com/compose/how-tos/init-containers) in a stack can be marked so that
+ComposeFlux does not treat its exit as a failure. Add this label to the service.
 
 Example
 
@@ -239,10 +253,10 @@ Example
 ---
 name: valkey
 services:
-  init-change-ownership: #<---- One short container
+  init-change-ownership: # one-shot container
     image: busybox:latest
     labels:
-      - composeflux.init=true #<----- Make Health checks success, even this container exits (with exit code 0)
+      - composeflux.init=true # health checks succeed even though this container exits with code 0
     volumes:
       - valkey_data:/tmp/change-ownership
     environment:
@@ -269,7 +283,7 @@ volumes:
 
 `composeflux.image-update.exclude`
 
-You can exclude, image updates using this label
+This label excludes a stack from automatic image updates.
 
 Example
 

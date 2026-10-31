@@ -9,16 +9,16 @@ provider. ComposeFlux fetches every secret in the configured project and exposes
 2. Open **Secrets Manager**.
 3. Click **New Project** and create a project for ComposeFlux.
 
-![Project creation](../assets/bw-projects.png)
+![Bitwarden Secrets Manager project creation](../assets/bw-projects.png)
 
 ## 2. Add secrets
 
-Add the keys your stacks reference, for example `DATABASE_URL` or `API_KEY`.
+Add the keys referenced by the stacks, for example `DATABASE_URL` or `API_KEY`.
 
 To fetch the Git deploy key from Bitwarden, create a secret that contains the private key and copy its secret ID. See
 [Store the key in a secrets manager](GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
 
-![Secret creation](../assets/bw-example-secrets-add.png)
+![Adding secrets to a Bitwarden project](../assets/bw-example-secrets-add.png)
 
 ## 3. Create a machine account
 
@@ -28,7 +28,7 @@ To fetch the Git deploy key from Bitwarden, create a secret that contains the pr
 4. Set the permission to **Can read**.
 5. Click **Save**.
 
-![Machine account](../assets/bw-machine-account.png)
+![Bitwarden machine account with access to the project](../assets/bw-machine-account.png)
 
 ## 4. Create an access token
 
@@ -37,14 +37,14 @@ To fetch the Git deploy key from Bitwarden, create a secret that contains the pr
 3. Click **Create access token**.
 4. Copy the token and store it securely.
 
-![Token creation](../assets/bw-token-creation.png)
+![Creating a Bitwarden machine account access token](../assets/bw-token-creation.png)
 
 ## 5. Configure ComposeFlux
 
 Set the following values. The organization ID, project ID, API URL, and identity URL are shown in the machine account
 configuration.
 
-![Machine account configuration](../assets/bw-machine-account-config.png)
+![Bitwarden machine account configuration values](../assets/bw-machine-account-config.png)
 
 ```bash
 BITWARDEN_ACCESS_TOKEN=<access-token>

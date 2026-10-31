@@ -2,9 +2,11 @@
 
 ## Architecture
 
-This Architecture diagram is generated from [Git diagram](https://gitdiagram.com/veerendra2/composeflux)
+The diagram below is generated with [GitDiagram](https://gitdiagram.com/veerendra2/composeflux).
 
 ![Architecture diagram](./assets/arch-diagram.png)
+
+The same diagram is available as a live embed:
 
 [![Architecture diagram of veerendra2/composeflux](https://gitdiagram.com/veerendra2/composeflux/diagram.png)](https://gitdiagram.com/veerendra2/composeflux?utm_source=readme&utm_medium=picture)
 
@@ -36,8 +38,8 @@ task build
 
 ### MkDocs Local Setup
 
-If you use direnv and pyenv, an [.envrc](../.envrc) is already configured. Otherwise, set up a Python virtual
-environment manually:
+The repository `.envrc` configures a Python virtual environment for direnv and pyenv users. Without direnv, create the
+virtual environment manually:
 
 ```bash
 python3 -m venv venv/

@@ -1,16 +1,14 @@
-<p align="center">
-  <img src="./docs/assets/composeflux-banner.png" alt="ComposeFlux" width="400">
-</p>
+<h1 align="center">ComposeFlux</h1>
 
 <p align="center">
   <strong>A lightweight GitOps continuous deployment tool for Docker Compose.</strong>
 </p>
 
 <p align="center">
-  <a href="https://veerendra2.github.io/composeflux/Overvie">Overview</a> •
+  <a href="https://veerendra2.github.io/composeflux/Overview/">Overview</a> •
   <a href="https://veerendra2.github.io/composeflux/GettingStarted/">Getting Started</a> •
-  <a href="https://github.com/veerendra2/composeflux/releases">Releases</a> •
-  <a href="Architecture Diagram">Releases</a>
+  <a href="https://veerendra2.github.io/composeflux/Development/">Architecture</a> •
+  <a href="https://github.com/veerendra2/composeflux/releases">Releases</a>
 </p>
 
 <p align="center">

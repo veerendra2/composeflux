@@ -1,19 +1,21 @@
 # Offline Secrets with Age
 
-ComposeFlux can decrypt [age](https://github.com/FiloSottile/age) encrypted files stored in the Git repository and
-use their values for Compose interpolation. Decryption happens in memory; plaintext is not written to disk.
+ComposeFlux can decrypt [age](https://github.com/FiloSottile/age) encrypted files stored in the Git repository and use
+their values for Compose interpolation. Decryption happens in memory; plaintext is not written to disk.
 
 ## How it works
 
-- ComposeFlux reads `*.age` files directly from the stack root, each stack directory, and directories pulled in
-  through `include` or `extends`. Subdirectories are not scanned recursively.
+- ComposeFlux reads `*.age` files directly from the stack root, each stack directory, and directories pulled in through
+  `include` or `extends`. Subdirectories are not scanned recursively.
 - Each file must be a dotenv file encrypted with a passphrase (`age -p`). ASCII-armored and binary files are both
   supported.
 - Values are merged in this order: stack root, stack directory, included directory. A later value overrides an earlier
   one. Files in the same directory are merged in filename order.
+- Offline secrets also override remote secrets. A stack-directory value takes precedence over a stack-root value, which
+  takes precedence over a value fetched from Bitwarden or Infisical.
 - A `*.age` file must be a regular file. Symbolic links are rejected.
-- Values are available only for Compose interpolation. A container receives a value only when its service references
-  it, for example `DATABASE_PASSWORD: ${DATABASE_PASSWORD}`.
+- Values are available only for Compose interpolation. A container receives a value only when its service references it,
+  for example `DATABASE_PASSWORD: ${DATABASE_PASSWORD}`.
 - Committing a change to a `*.age` file triggers a redeploy of the affected stacks.
 
 ## Directory layout
@@ -49,7 +51,7 @@ stacks/                     STACK_PATH
     API_KEY=1234567890abcdef
     ```
 
-3. Encrypt it with a passphrase. The `-a` option stores the ciphertext as text:
+3. Encrypt the file with a passphrase. The `-a` option stores the ciphertext as text:
 
     ```bash
     age -p -a -o stacks/nextcloud/secrets.env.age secrets.env
@@ -91,8 +93,8 @@ volumes:
   compose-stack:
 ```
 
-Keep the passphrase in a protected environment variable or a local `.env` file. Do not commit it to the Compose file
-or the stacks repository.
+Keep the passphrase in a protected environment variable or a local `.env` file. Do not commit it to the Compose file or
+the stacks repository.
 
 ## Use the values
 
@@ -126,12 +128,12 @@ The script requires `age` and `vim`. It writes binary age files, which ComposeFl
 
 ## Troubleshooting
 
-| Symptom | Cause |
-| --- | --- |
-| `failed to decrypt age file` | Wrong `AGE_PASSPHRASE`, or the file was encrypted to an age identity instead of a passphrase. |
-| `age secret file must not be a symbolic link` | Replace the link with the encrypted file itself. |
-| A file is not loaded | The file is nested in a subdirectory, is not located next to a Compose file or stack root, or does not end in `.age`. |
-| A variable is empty in a container | The service does not reference the variable in its Compose configuration. |
+| Symptom                                       | Cause                                                                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `failed to decrypt age file`                  | Wrong `AGE_PASSPHRASE`, or the file was encrypted to an age identity instead of a passphrase.                         |
+| `age secret file must not be a symbolic link` | Replace the link with the encrypted file itself.                                                                      |
+| A file is not loaded                          | The file is nested in a subdirectory, is not located next to a Compose file or stack root, or does not end in `.age`. |
+| A variable is empty in a container            | The service does not reference the variable in its Compose configuration.                                             |
 
-A decryption failure stops the current reconciliation pass. Fix the passphrase or the file, then wait for the next
-sync or run `composeflux sync`.
+A decryption failure stops the current reconciliation pass. Fix the passphrase or the file, then wait for the next sync
+or run `composeflux sync`.

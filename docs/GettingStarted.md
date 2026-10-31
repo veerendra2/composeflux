@@ -4,9 +4,8 @@ Install ComposeFlux on a Docker host and connect it to a Git repository of Compo
 
 ## Prerequisites
 
-- A Linux host with Docker Engine and the Docker Compose plugin (v2 or later).
-- Access to the host Docker socket at `/var/run/docker.sock`.
-- A Git repository reachable over SSH that contains your Compose stacks.
+- A Linux host with Docker Engine and access to the daemon socket at `/var/run/docker.sock`.
+- A Git repository reachable over SSH that contains the Compose stacks.
 - Read access to the repository through an SSH key. The key can be mounted into the container or stored in a supported
   secrets manager.
 - Optional: an Age passphrase or Bitwarden/Infisical credentials for secrets.
@@ -19,41 +18,43 @@ The following configuration deploys every stack under `stacks/` in the repositor
 
 1. Create a `.env` file:
 
-```bash
-GIT_REPO_URL=git@github.com:user/stacks-repo.git
-STACK_PATH=stacks
-```
+    ```bash
+    GIT_REPO_URL=git@github.com:user/stacks-repo.git
+    STACK_PATH=stacks
+    ```
 
 2. Create `compose.yml`:
 
-```yaml
-services:
-  composeflux:
-    image: ghcr.io/veerendra2/composeflux:latest
-    container_name: composeflux
-    restart: unless-stopped
-    environment:
-      GIT_REPO_URL: ${GIT_REPO_URL}
-      STACK_PATH: ${STACK_PATH}
+    ```yaml
+    services:
+      composeflux:
+        image: ghcr.io/veerendra2/composeflux:latest
+        container_name: composeflux
+        restart: unless-stopped
+        environment:
+          GIT_REPO_URL: ${GIT_REPO_URL}
+          STACK_PATH: ${STACK_PATH}
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
+          - compose-stack:/opt/compose-stack
+
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
-      - /opt/compose-stack:/opt/compose-stack
-```
+      compose-stack:
+    ```
 
 3. Start ComposeFlux:
 
-```bash
-docker compose up -d
-docker compose logs -f
-```
-
+    ```bash
+    docker compose up -d
+    docker compose logs -f
+    ```
 The mounted key must be readable by the container and must not have a passphrase. The named volume keeps the Git clone
 between restarts. If the initial sync fails, the process exits with the error in the log.
 
-ComposeFlux can fetch ssh deploy from remote secrets manager(Bitwarden or Inficial), you can set
-`GIT_DEPLOY_KEY_SECRET_REF`. For Bitwarden, the value would be ID of the secret and for infsical, the value would be env
-key [GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
+The SSH deploy key can also be fetched from a remote secrets manager (Bitwarden or Infisical) by setting
+`GIT_DEPLOY_KEY_SECRET_REF`. For Bitwarden the value is the secret ID; for Infisical it is the secret key name. See
+[GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
 
 ## Deploy with Ansible
 
@@ -104,7 +105,7 @@ Every option has an environment variable and a command-line flag. Flags apply to
 | --------------------------- | ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GIT_REPO_URL`              | `--repo-url`              | required    | SSH URL of the Git repository.                                                                                                             |
 | `STACK_PATH`                | `--stack-path`            | required    | Directory in the repository that contains the stacks.                                                                                      |
-| `CONFIG_FILE`               | `--config-file`           | `stack.yml` | Name of the shared stack configuration file.                                                                                               |
+| `CONFIG_FILE`               | `--config-file`           | `stack.yml` | Path of the shared stack configuration file, relative to `STACK_PATH`.                                                                     |
 | `GIT_INTERVAL`              | `--git-interval`          | `5m`        | Git polling interval. Must be greater than zero.                                                                                           |
 | `HEALTH_RECONCILE_INTERVAL` | `--health-interval`       | `0`         | Health reconciliation interval. `0` disables it.                                                                                           |
 | `IMAGE_UPDATE_SCHEDULE`     | `--image-update-schedule` | empty       | Cron expression for image update checks. Empty disables it.                                                                                |
@@ -174,7 +175,7 @@ stop startup.
 
 ## Full Compose example
 
-The example below lists every option. Uncomment only what you need.
+The example below lists every option. Uncomment only the options in use.
 
 ```yaml
 services:
