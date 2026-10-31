@@ -1,84 +1,84 @@
-# GitHub Deploy Keys Setup
+# GitHub Deploy Keys
 
-Set up read-only SSH deploy keys for secure Git access.
+A deploy key gives ComposeFlux read-only SSH access to the stacks repository. The same approach works with other Git
+providers.
 
-You can follow a similar approach for other Git providers.
-
-## Generate SSH Key Pair
+## Generate a key pair
 
 ```bash
-# Generate new key pair (no passphrase for automation)
 ssh-keygen -t ed25519 -C "composeflux-deploy-key" -f ~/.ssh/composeflux_deploy
-
-# This creates:
-# - Private key: ~/.ssh/composeflux_deploy
-# - Public key: ~/.ssh/composeflux_deploy.pub
 ```
 
-## Add Public Key to GitHub
+This creates the private key `~/.ssh/composeflux_deploy` and the public key `~/.ssh/composeflux_deploy.pub`. Do not
+set a passphrase; ComposeFlux runs unattended.
 
-1. Copy public key: `~/.ssh/composeflux_deploy.pub`
-2. Go to your GitHub repository, **Settings** → **Deploy keys** → Click **Add deploy key**
+## Add the public key to GitHub
 
-![Github Deploy Keys](../assets/github-deploy-key-config.png)
+1. Copy the public key:
 
-## Add Private Key to Secrets Manager
+    ```bash
+    cat ~/.ssh/composeflux_deploy.pub
+    ```
 
-For more details, see:
+2. Open the repository on GitHub.
+3. Go to **Settings**, then **Deploy keys**, and click **Add deploy key**.
+4. Paste the key and leave write access disabled.
 
-- [Bitwarden Add Secrets](Bitwarden.md#2-add-secrets)
-- [Infisical Add Secrets](Infisical.md#3-add-secrets)
+![GitHub deploy key](../assets/github-deploy-key-config.png)
 
-### For Bitwarden
+## Provide the private key to ComposeFlux
 
-1. Copy private key: `~/.ssh/composeflux_deploy`
-2. In Bitwarden Secrets Manager, create a secret named `SSH_PRIVATE_KEY`.
-3. Paste the entire private key (include `-----BEGIN` and `-----END` lines).
-4. Assign the secret to the ComposeFlux project.
+Use one of the following options.
 
-### For Infisical
+### Mount the key
 
-1. Copy private key: `~/.ssh/composeflux_deploy`
-2. In Infisical, go to your ComposeFlux project.
-3. Add a secret named `SSH_PRIVATE_KEY`.
-4. Paste the entire private key content.
-
-## Configure ComposeFlux
-
-To have ComposeFlux fetch `SSH_PRIVATE_KEY` from your secrets manager, set `GIT_DEPLOY_KEY_SECRET_REF`:
+Mount the private key at `GIT_SSH_KEY_PATH`. The default path is `/.ssh/composeflux_id_rsa`.
 
 ```yaml
-# In compose.yml
-environment:
-  GIT_REPO_URL: git@github.com:user/repo.git # SSH URL
-  GIT_DEPLOY_KEY_SECRET_REF: SSH_PRIVATE_KEY # Change if using a different name
-  BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
-  BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
-  BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
-```
-
-## Alternative: Mount Local Key
-
-Skip remote secrets credentials and mount the key directly:
-
-```yaml
-# In compose.yml
-environment:
-  GIT_SSH_KEY_PATH: /.ssh/composeflux_id_rsa # Where the key will be mounted
+services:
+  composeflux:
+    image: ghcr.io/veerendra2/composeflux:latest
+    environment:
+      GIT_REPO_URL: git@github.com:user/repo.git
+      STACK_PATH: stacks
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
+      - compose-stack:/opt/compose-stack
 
 volumes:
-  - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
+  compose-stack:
 ```
 
-This bypasses the secrets manager for SSH keys entirely. Useful if you manage SSH keys separately or don't want to store
-them in Bitwarden/Infisical.
+### Store the key in a secrets manager
 
-## Test SSH Access
+This option requires Bitwarden or Infisical credentials. Set `GIT_DEPLOY_KEY_SECRET_REF` to the secret reference:
+
+- **Bitwarden**: the secret ID.
+- **Infisical**: the secret key name, for example `SSH_PRIVATE_KEY`.
+
+At startup, ComposeFlux fetches the value and writes it to `GIT_SSH_KEY_PATH` with mode `0600`. When the reference is
+empty, ComposeFlux uses the key already present at that path.
+
+Do not also mount the key at `GIT_SSH_KEY_PATH`: a read-only mount makes the write fail at startup.
+
+```yaml
+environment:
+  GIT_REPO_URL: git@github.com:user/repo.git
+  STACK_PATH: stacks
+  GIT_DEPLOY_KEY_SECRET_REF: SSH_PRIVATE_KEY
+  INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID}
+  INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET}
+  INFISICAL_ENVIRONMENT: prod
+  INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
+```
+
+See [Bitwarden](Bitwarden.md#2-add-secrets) or [Infisical](Infisical.md#3-add-secrets) for adding the secret.
+
+## Test access
 
 ```bash
-# Test GitHub connection with your key
 ssh -i ~/.ssh/composeflux_deploy -T git@github.com
-
-# Expected output:
-# Hi user/repo! You've successfully authenticated, but GitHub does not provide shell access.
 ```
+
+A successful test prints a message that the key authenticated but does not provide shell access.

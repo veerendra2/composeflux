@@ -1,162 +1,190 @@
 # Getting Started
 
-Deploy ComposeFlux and manage Docker Compose stacks via GitOps.
+Install ComposeFlux on a Docker host and connect it to a Git repository of Compose stacks.
 
 ## Prerequisites
 
-- Docker with Compose v2+
-- Git repository with Compose stacks
-- Secrets management: local **Age encrypted files** (`*.age`) or a remote provider (**Bitwarden** / **Infisical**)
-- SSH key for Git access (store in secrets manager or mount as volume)
+- A Linux host with Docker Engine and access to the daemon socket at `/var/run/docker.sock`.
+- The Docker Compose plugin on the host that starts ComposeFlux, for the `docker compose` commands in this guide.
+  ComposeFlux itself does not require the plugin at runtime.
+- A Git repository reachable over SSH that contains the Compose stacks.
+- Read access to the repository through an SSH key. The key can be mounted into the container or stored in a supported
+  secrets manager.
+- Optional: an Age passphrase or Bitwarden/Infisical credentials for secrets.
 
-## Environment Variables
+See [GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md) for creating a read-only key.
 
-### Required
+## Quick start
 
-| Variable       | Description                                                   |
-| -------------- | ------------------------------------------------------------- |
-| `GIT_REPO_URL` | Git repository SSH URL (e.g., `git@github.com:user/repo.git`) |
-| `STACK_PATH`   | Path to stacks directory in repo (relative to repo root)      |
+The following configuration deploys every stack under `stacks/` in the repository.
 
-### Optional - Local Age Encrypted Secrets
+1. Create a `.env` file:
 
-| Variable         | Description                                                          | Default |
-| ---------------- | -------------------------------------------------------------------- | ------- |
-| `AGE_PASSPHRASE` | Passphrase used to decrypt `*.age` secret files in Git repositories | `""`    |
+    ```bash
+    GIT_REPO_URL=git@github.com:user/stacks-repo.git
+    STACK_PATH=stacks
+    ```
 
-When unset, local secrets are disabled and ComposeFlux does not scan for `*.age` files.
+2. Create `compose.yml`:
 
-See the [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md) for full details on encrypting and layering secrets.
+    ```yaml
+    services:
+      composeflux:
+        image: ghcr.io/veerendra2/composeflux:latest
+        container_name: composeflux
+        restart: unless-stopped
+        environment:
+          GIT_REPO_URL: ${GIT_REPO_URL}
+          STACK_PATH: ${STACK_PATH}
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
+          - compose-stack:/opt/compose-stack
 
-### Optional - Remote Secrets Provider
+    volumes:
+      compose-stack:
+    ```
 
-Configure either Bitwarden or Infisical credentials. ComposeFlux selects the provider from the configured credentials.
-Local and remote secrets can be enabled together, but only one provider may be configured in each category.
+3. Start ComposeFlux:
 
-**Bitwarden:**
+    ```bash
+    docker compose up -d
+    docker compose logs -f
+    ```
 
-| Variable                    | Description                  | Default                                |
-| --------------------------- | ---------------------------- | -------------------------------------- |
-| `BITWARDEN_ACCESS_TOKEN`    | Machine account access token |                                        |
-| `BITWARDEN_ORGANIZATION_ID` | Organization ID              |                                        |
-| `BITWARDEN_PROJECT_ID`      | Project ID                   |                                        |
-| `BITWARDEN_API_URL`         | Bitwarden API URL            | `https://vault.bitwarden.com/api`      |
-| `BITWARDEN_IDENTITY_URL`    | Bitwarden Identity URL       | `https://vault.bitwarden.com/identity` |
+The mounted key must be readable by the container and must not have a passphrase. The named volume keeps the Git clone
+between restarts. If the initial sync fails, the process exits with the error in the log.
 
-**Infisical:**
+The SSH deploy key can also be fetched from a remote secrets manager (Bitwarden or Infisical) by setting
+`GIT_DEPLOY_KEY_SECRET_REF`. For Bitwarden the value is the secret ID; for Infisical it is the secret key name. See
+[GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
 
-| Variable                  | Description                                                       | Default                     |
-| ------------------------- | ----------------------------------------------------------------- | --------------------------- |
-| `INFISICAL_CLIENT_ID`     | Universal Auth client ID                                          |                             |
-| `INFISICAL_CLIENT_SECRET` | Universal Auth client secret                                      |                             |
-| `INFISICAL_ENVIRONMENT`   | Environment slug (e.g., `prod`)                                   |                             |
-| `INFISICAL_PROJECT_ID`    | Project ID                                                        |                             |
-| `INFISICAL_SITE_URL`      | Infisical site URL                                                | `https://app.infisical.com` |
-| `INFISICAL_SECRET_PATH`   | Secret path in Infisical project. Supports comma-separated paths (e.g., `/generic,/apps/prod`). If the same secret exists in multiple paths, the last path's value takes precedence. | `/`                         |
+!!! note
 
-### Optional
+    When `GIT_DEPLOY_KEY_SECRET_REF` is set, remove the read-only key mount from the Compose file. ComposeFlux writes
+    the fetched key to `GIT_SSH_KEY_PATH`, and a read-only mount makes that write fail at startup.
 
-| Variable                    | Description                                                                                                                   | Default                    |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `GIT_DEPLOY_KEY_SECRET_REF` | Deploy key secret reference (name or ID) in secrets manager (See [Deploy Key Secret Reference](#deploy-key-secret-reference)) |                            |
-| `GIT_SSH_KEY_PATH`          | SSH key path inside container                                                                                                 | `/.ssh/composeflux_id_rsa` |
-| `GIT_CLONE_PATH`            | Local clone directory                                                                                                         | `/opt/compose-stack`       |
-| `GIT_INTERVAL`              | Git sync interval                                                                                                             | `5m`                       |
-| `HEALTH_RECONCILE_INTERVAL` | Interval for proactive stack health reconciliation. ComposeFlux redeploys any stack with a non-running container (unless it is a completed init container). Set to e.g. `5m` to enable. | disabled          |
-| `IMAGE_UPDATE_SCHEDULE`     | Cron expression for Docker image update checks, e.g. `0 3 * * *`. Empty = disabled.                                           | `""`                       |
-| `GIT_BRANCH`                | Git branch to track                                                                                                           | `main`                     |
-| `CONFIG_FILE`               | Stack config file name (see [Stack Configuration](Introduction.md#stack-configuration))                                       | `stack.yml`                |
-| `LOG_LEVEL`                 | Log level (`debug`/`info`/`warn`/`error`)                                                                                     | `info`                     |
-| `LOG_FORMAT`                | Log format (`console`/`json`)                                                                                                 | `console`                  |
-| `LOG_ADD_SOURCE`            | Add source location to logs                                                                                                   | `false`                    |
-| `REMOVE_ORPHANS`            | Remove orphan containers during deploy                                                                                        | `true`                     |
-| `PRUNE_INTERVAL`            | Interval for periodic Docker resource pruning (images, volumes, build cache). Only runs when all managed stacks are healthy. Set to `0` to disable. | `24h`       |
+## Deploy with Ansible
 
-!!! warning
-
-    When `PRUNE_INTERVAL` is set, pruning removes dangling (untagged) images, unused volumes, and build cache. Containers and networks are not pruned. Pruning requires every discovered source stack to be present and healthy in Docker and none to have `composeflux.health.suspend=true` in its loaded Git Compose project.
-
-`GIT_INTERVAL` must be greater than zero. Health and prune intervals must be nonnegative; `0` disables those optional
-loops. A nonempty `IMAGE_UPDATE_SCHEDULE` must be a valid cron expression. Invalid values fail startup before clients
-are initialized.
-
-## Commands
-
-ComposeFlux supports two commands:
+The [`ansible-role-composeflux-deploy`](https://github.com/veerendra2/ansible-role-composeflux-deploy) role installs the
+same deployment on a target host.
 
 ```bash
-Usage: composeflux <command> [flags]
-
-A GitOps continuous deployment tool for Docker Compose.
-
-Flags:
-  -h, --help                    Show context-sensitive help.
-      --log-format="console"    Set the output format of the logs. Must be "console" or "json" ($LOG_FORMAT).
-      --log-level=INFO          Set the log level. Must be "DEBUG", "INFO", "WARN" or "ERROR" ($LOG_LEVEL).
-      --log-add-source          Whether to add source file and line number to log records ($LOG_ADD_SOURCE).
-      --version                 Print version information and exit
-
-Commands:
-  run     Run ComposeFlux in daemon mode (continuous reconciliation)
-  sync    Perform a one-shot sync and deploy
-
-Run "composeflux <command> --help" for more information on a command.
+ansible-galaxy role install veerendra2.composeflux_deploy
+ansible-galaxy collection install community.docker   # required by the role
 ```
 
-- **`run`** - Daemon mode with continuous reconciliation (default). Performs an initial sync at startup, then checks the
-  Git repository for changes at configured intervals (default: 5 minutes). An error returned by the initial sync exits
-  the process. Errors during later reconciliation are logged without stopping the daemon.
-- **`sync`** - One-shot sync and deploy. Performs an immediate sync and force-reconciles all managed stacks. Useful when you update secrets in your secrets manager without making Git changes. See
-  [Change Detection](Introduction.md#git-diff--dependency-change-detection).
+```yaml
+- hosts: servers
+  become: true
+  roles:
+    - role: veerendra2.composeflux_deploy
+      vars:
+        composeflux_git_repo_url: "git@github.com:user/infra-repo.git"
+        composeflux_stack_path: "servers/myhost"
+
+        # Provide either a local key or a secrets manager reference.
+        composeflux_ssh_key_local_path: "~/.ssh/composeflux_deploy"
+        # composeflux_ssh_key_secret_ref: "SSH_PRIVATE_KEY"
+
+        # Optional secrets.
+        composeflux_age_passphrase: "{{ vault_age_passphrase }}"
+        # composeflux_infisical_client_id: "{{ vault_infisical_client_id }}"
+        # composeflux_infisical_client_secret: "{{ vault_infisical_client_secret }}"
+        # composeflux_infisical_environment: "prod"
+        # composeflux_infisical_project_id: "project-id"
+```
 
 ```bash
-# Daemon mode (initial sync at startup, then checks Git every 5 minutes)
-composeflux run
-
-# One-shot mode - manually trigger sync
-composeflux sync
+ansible-playbook playbook.yml
+ansible-playbook playbook.yml --tags sync   # force a reconciliation now
 ```
 
-**Important**: The `run` daemon fetches secrets and deploys changes only when Git updates are detected or when a stack is unhealthy/missing. If you update secrets in your secrets manager without making Git changes, run `composeflux sync` manually to apply updated secrets. See
-[Change Detection](Introduction.md#git-diff--dependency-change-detection).
+Role variables map to the environment variables below. See the
+[role defaults](https://github.com/veerendra2/ansible-role-composeflux-deploy/blob/main/defaults/main.yml) for the full
+list.
 
-## Deploy ComposeFlux
+## Options
 
-**1. Set up Secrets:**
+Every option has an environment variable and a command-line flag. Flags apply to both `run` and `sync`.
 
-- [Age Encrypted Secrets Setup Guide](how-to-guides/AgeSecrets.md)
-- [Bitwarden Setup Guide](how-to-guides/Bitwarden.md)
-- [Infisical Setup Guide](how-to-guides/Infisical.md)
+### Core
 
-**2. Configure Git Access:**
+| Environment variable        | Flag                      | Default     | Description                                                                                                                                |
+| --------------------------- | ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GIT_REPO_URL`              | `--repo-url`              | required    | SSH URL of the Git repository.                                                                                                             |
+| `STACK_PATH`                | `--stack-path`            | required    | Directory in the repository that contains the stacks.                                                                                      |
+| `CONFIG_FILE`               | `--config-file`           | `stack.yml` | Path of the shared stack configuration file, relative to `STACK_PATH`.                                                                     |
+| `GIT_INTERVAL`              | `--git-interval`          | `5m`        | Git polling interval. Must be greater than zero.                                                                                           |
+| `HEALTH_RECONCILE_INTERVAL` | `--health-interval`       | `0`         | Health reconciliation interval. `0` disables it.                                                                                           |
+| `IMAGE_UPDATE_SCHEDULE`     | `--image-update-schedule` | empty       | Cron expression for image update checks. Empty disables it.                                                                                |
+| `PRUNE_INTERVAL`            | `--prune-interval`        | `24h`       | Docker resource prune interval. `0` disables it. See [Resource pruning](Overview.md#resource-pruning) before enabling it on a shared host. |
 
-- [GitHub Deploy Keys Setup](how-to-guides/GithubDeployKeys.md) - Recommended for secure read-only access
+### Git
 
-**3. Create `.env` file:**
+| Environment variable        | Flag                      | Default                    | Description                                                                           |
+| --------------------------- | ------------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
+| `GIT_BRANCH`                | `--branch`                | `main`                     | Branch to track.                                                                      |
+| `GIT_SSH_KEY_PATH`          | `--ssh-key-path`          | `/.ssh/composeflux_id_rsa` | SSH private key path inside the container.                                            |
+| `GIT_DEPLOY_KEY_SECRET_REF` | `--deploy-key-secret-ref` | empty                      | Secret name or ID in the configured secrets manager. Requires Bitwarden or Infisical. |
+| `GIT_CLONE_PATH`            | `--clone-path`            | `/opt/compose-stack`       | Local clone directory.                                                                |
+
+### Offline secrets
+
+| Environment variable | Flag               | Default | Description                                                   |
+| -------------------- | ------------------ | ------- | ------------------------------------------------------------- |
+| `AGE_PASSPHRASE`     | `--age-passphrase` | empty   | Passphrase for `*.age` files. Empty disables offline secrets. |
+
+### Bitwarden
+
+| Environment variable        | Flag                          | Default                                | Description                   |
+| --------------------------- | ----------------------------- | -------------------------------------- | ----------------------------- |
+| `BITWARDEN_ACCESS_TOKEN`    | `--bitwarden-access-token`    | required with Bitwarden                | Machine account access token. |
+| `BITWARDEN_ORGANIZATION_ID` | `--bitwarden-organization-id` | required with Bitwarden                | Organization ID.              |
+| `BITWARDEN_PROJECT_ID`      | `--bitwarden-project-id`      | required with Bitwarden                | Project ID.                   |
+| `BITWARDEN_API_URL`         | `--bitwarden-api-url`         | `https://vault.bitwarden.com/api`      | API URL.                      |
+| `BITWARDEN_IDENTITY_URL`    | `--bitwarden-identity-url`    | `https://vault.bitwarden.com/identity` | Identity URL.                 |
+
+### Infisical
+
+| Environment variable      | Flag                        | Default                     | Description                                                                        |
+| ------------------------- | --------------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
+| `INFISICAL_CLIENT_ID`     | `--infisical-client-id`     | required with Infisical     | Universal Auth client ID.                                                          |
+| `INFISICAL_CLIENT_SECRET` | `--infisical-client-secret` | required with Infisical     | Universal Auth client secret.                                                      |
+| `INFISICAL_ENVIRONMENT`   | `--infisical-environment`   | required with Infisical     | Environment slug, for example `prod`.                                              |
+| `INFISICAL_PROJECT_ID`    | `--infisical-project-id`    | required with Infisical     | Project ID.                                                                        |
+| `INFISICAL_SECRET_PATH`   | `--infisical-secret-path`   | `/`                         | Secret path. Comma-separated paths are allowed; later paths override earlier ones. |
+| `INFISICAL_SITE_URL`      | `--infisical-site-url`      | `https://app.infisical.com` | Site URL.                                                                          |
+
+### Docker and logging
+
+| Environment variable | Flag               | Default   | Description                                                       |
+| -------------------- | ------------------ | --------- | ----------------------------------------------------------------- |
+| `REMOVE_ORPHANS`     | `--remove-orphans` | `true`    | Remove containers that are not defined in the Compose project.    |
+| `LOG_LEVEL`          | `--log-level`      | `INFO`    | `DEBUG`, `INFO`, `WARN`, or `ERROR`. Values are case-insensitive. |
+| `LOG_FORMAT`         | `--log-format`     | `console` | `console` or `json`.                                              |
+| `LOG_ADD_SOURCE`     | `--log-add-source` | `false`   | Include the source file and line in log records.                  |
+
+### Commands
+
+| Command            | Description                                                              |
+| ------------------ | ------------------------------------------------------------------------ |
+| `composeflux run`  | Daemon mode. Polls Git and reconciles continuously. This is the default. |
+| `composeflux sync` | Performs one forced reconciliation, then exits.                          |
+
+To run a one-shot sync against a running container:
 
 ```bash
-# Required - Common
-GIT_REPO_URL=git@github.com:user/stacks-repo.git
-STACK_PATH=stacks
-
-# Option A: Local Age Encrypted Secrets
-AGE_PASSPHRASE=your-secure-passphrase
-
-# Option B: Remote Bitwarden Secrets
-# GIT_DEPLOY_KEY_SECRET_REF=aaaaaaa-bbbbb-bbbb-cccc-ddddd
-# BITWARDEN_ACCESS_TOKEN=your-access-token
-# BITWARDEN_ORGANIZATION_ID=your-org-id
-# BITWARDEN_PROJECT_ID=your-project-id
-
-# Option C: Remote Infisical Secrets
-# GIT_DEPLOY_KEY_SECRET_REF=SSH_PRIVATE_KEY
-# INFISICAL_CLIENT_ID=your-client-id
-# INFISICAL_CLIENT_SECRET=your-client-secret
-# INFISICAL_ENVIRONMENT=prod
-# INFISICAL_PROJECT_ID=your-project-id
+docker exec composeflux /composeflux sync
 ```
 
-**4. Create `compose.yml`:**
+ComposeFlux validates the configuration before starting. `GIT_INTERVAL` must be greater than zero, health and prune
+intervals must not be negative, and a non-empty `IMAGE_UPDATE_SCHEDULE` must be a valid cron expression. Invalid values
+stop startup.
+
+## Full Compose example
+
+The example below lists every option. Uncomment only the options in use.
 
 ```yaml
 services:
@@ -164,100 +192,73 @@ services:
     image: ghcr.io/veerendra2/composeflux:latest
     container_name: composeflux
     restart: unless-stopped
-
     environment:
-      # Git Configuration
+      # Required
       GIT_REPO_URL: ${GIT_REPO_URL}
       STACK_PATH: ${STACK_PATH}
-      # GIT_INTERVAL: 5m              # Sync interval
+
+      # Git
       # GIT_BRANCH: main
+      # GIT_INTERVAL: 5m
+      # GIT_CLONE_PATH: /opt/compose-stack
+      # GIT_SSH_KEY_PATH: /.ssh/composeflux_id_rsa
+      # GIT_DEPLOY_KEY_SECRET_REF: ""
 
-      # Local Age Encrypted Secrets
-      AGE_PASSPHRASE: ${AGE_PASSPHRASE}
+      # Stack configuration
+      # CONFIG_FILE: stack.yml
 
-      # Remote Secrets - Bitwarden
-      # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
+      # Offline secrets
+      # AGE_PASSPHRASE: ${AGE_PASSPHRASE}
+
+      # Bitwarden Secrets Manager
       # BITWARDEN_ACCESS_TOKEN: ${BITWARDEN_ACCESS_TOKEN}
       # BITWARDEN_ORGANIZATION_ID: ${BITWARDEN_ORGANIZATION_ID}
       # BITWARDEN_PROJECT_ID: ${BITWARDEN_PROJECT_ID}
+      # BITWARDEN_API_URL: https://vault.bitwarden.com/api
+      # BITWARDEN_IDENTITY_URL: https://vault.bitwarden.com/identity
 
-      # Remote Secrets - Infisical
-      # GIT_DEPLOY_KEY_SECRET_REF: ${GIT_DEPLOY_KEY_SECRET_REF}
+      # Infisical Secrets Manager
       # INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID}
       # INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET}
-      # INFISICAL_ENVIRONMENT: ${INFISICAL_ENVIRONMENT}
+      # INFISICAL_ENVIRONMENT: prod
       # INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
+      # INFISICAL_SECRET_PATH: /
       # INFISICAL_SITE_URL: https://app.infisical.com
 
-      # Reconciliation & Pruning
-      # HEALTH_RECONCILE_INTERVAL: 5m  # Proactive health check interval (disabled by default)
-      # PRUNE_INTERVAL: 24h           # Periodic Docker resource prune interval (24h default, 0 to disable)
+      # Reconciliation and pruning
+      # HEALTH_RECONCILE_INTERVAL: 5m
+      # IMAGE_UPDATE_SCHEDULE: "0 3 * * *"
+      # PRUNE_INTERVAL: 24h
+
+      # Docker
+      # REMOVE_ORPHANS: "true"
 
       # Logging
-      # LOG_LEVEL: info
-      # LOG_FORMAT: console           # console or json
+      # LOG_LEVEL: INFO
+      # LOG_FORMAT: console
+      # LOG_ADD_SOURCE: "false"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-
-      # Optional: Custom SSH known_hosts
-      # - ./ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro
-
-      # Optional: Mount local SSH key instead of fetching from secrets manager
-      # - ~/.ssh/id_rsa:/.ssh/composeflux_id_rsa:ro
-```
-
-### Mount SSH Key
-
-If you prefer to mount your SSH key directly instead of storing it in the secrets manager:
-
-1. Leave the Bitwarden and Infisical credentials unset
-2. Mount your SSH key to the container at the `GIT_SSH_KEY_PATH` location (default: `/.ssh/composeflux_id_rsa`)
-
-### Deploy Key Secret Reference
-
-ComposeFlux can fetch your SSH deploy key from the secrets manager during startup, so it can clone private repositories
-without mounting a local key.
-
-How `GIT_DEPLOY_KEY_SECRET_REF` works:
-
-- Requires either complete Bitwarden or Infisical credentials
-- When set to a value (e.g., `SSH_PRIVATE_KEY` or a Bitwarden secret ID), ComposeFlux fetches that secret from your
-  secrets manager
-- **Bitwarden**: Uses it as the secret ID to fetch (see
-  [Bitwarden Add Secrets](how-to-guides/Bitwarden.md#2-add-secrets))
-- **Infisical**: Uses it as the secret key name to fetch
-- The fetched content must be your SSH private key
-- When left empty (default), skips fetch and uses mounted key at `GIT_SSH_KEY_PATH`
-
-Example:
-
-```yaml
-environment:
-  GIT_DEPLOY_KEY_SECRET_REF: "" # Disable fetch from secrets manager
-  # GIT_SSH_KEY_PATH: /.ssh/composeflux_id_rsa  # Optional: custom path
+      # Local key only. Omit when GIT_DEPLOY_KEY_SECRET_REF is set.
+      - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
+      - compose-stack:/opt/compose-stack
 
 volumes:
-  - ~/.ssh/id_rsa:/.ssh/composeflux_id_rsa:ro
+  compose-stack:
 ```
 
-**5. Start ComposeFlux:**
+## Verify
 
 ```bash
-# Default: Run in daemon mode (continuous reconciliation)
-docker compose up -d
-docker compose logs -f
-```
-
-## Verify Deployment
-
-```bash
-# Check logs
+# Follow logs. The initial sync reports deployed stacks and any failures.
 docker compose logs -f
 
-# List managed stacks (should show containers with composeflux label)
+# List managed containers.
 docker ps --filter "label=composeflux.managed=true"
 
-# List all compose projects
+# List Compose projects known to Docker.
 docker compose ls
 ```
+
+A successful sync logs a `Stack deployment summary` with counts for deployed, failed, and skipped stacks.
