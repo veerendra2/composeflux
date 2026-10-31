@@ -8,6 +8,8 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "requirements.txt"
+      - "overrides/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -43,8 +45,11 @@ jobs:
           restore-keys: |
             mkdocs-material-
 
-      - name: Install mkdocs-material
-        run: pip install mkdocs-material
+      - name: Install MkDocs dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate documentation
+        run: mkdocs build --strict
 
       - name: Deploy MkDocs
         run: mkdocs gh-deploy --force

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ComposeFlux">
+  <rect width="64" height="64" rx="14" fill="#1b2430"/>
+  <g stroke="none">
+    <polygon points="32,16 44,23 32,30 20,23" fill="#5b9bd5"/>
+    <polygon points="20,23 32,30 32,44 20,37" fill="#1f5fa8"/>
+    <polygon points="44,23 44,37 32,44 32,30" fill="#17497f"/>
+  </g>
+</svg>
