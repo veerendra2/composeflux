@@ -1,32 +1,62 @@
 ---
 site_name: ComposeFlux Docs
 site_url: https://veerendra2.github.io/composeflux/
+site_description: A lightweight GitOps continuous deployment tool for Docker Compose.
+
+repo_url: https://github.com/veerendra2/composeflux
+repo_name: veerendra2/composeflux
+edit_uri: edit/main/docs/
 
 exclude_docs: |
   internal/
+  superpowers/
 
 theme:
   name: material
+  custom_dir: overrides
+  favicon: assets/favicon.svg
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.action.view
   palette:
     - scheme: slate
       primary: black
       accent: indigo
+  icon:
+    repo: fontawesome/brands/github
 
 nav:
   - Home: index.md
-  - Introduction: Introduction.md
-  - Getting Started: GettingStarted.md
+  - User Guide:
+      - Overview: Overview.md
+      - Getting Started: GettingStarted.md
+  - Guides:
+      - Offline Secrets (Age): how-to-guides/AgeSecrets.md
+      - Bitwarden Secrets Manager: how-to-guides/Bitwarden.md
+      - Infisical Secrets Manager: how-to-guides/Infisical.md
+      - GitHub Deploy Keys: how-to-guides/GithubDeployKeys.md
   - Development: Development.md
-  - How-to Guides:
-      - Age Encrypted Secrets Setup: how-to-guides/AgeSecrets.md
-      - Bitwarden Secrets Manager Setup: how-to-guides/Bitwarden.md
-      - Infisical Secrets Manager Setup: how-to-guides/Infisical.md
-      - GitHub Deploy Keys Setup: how-to-guides/GithubDeployKeys.md
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
   - toc:
       permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
 
 extra:
   social:
@@ -36,5 +66,11 @@ extra:
     - icon: fontawesome/solid/scale-balanced
       link: https://github.com/veerendra2/composeflux/blob/main/LICENSE
       name: MIT License
+    - icon: fontawesome/brands/medium
+      link: https://medium.com/p/1da41b3680a4
+      name: Medium
+    - icon: fontawesome/solid/blog
+      link: https://veerendra2.github.io/gitops-for-homeservers-part3
+      name: Blog
 
-copyright: Copyright &copy; 2025 Veerendra K - MIT License
+copyright: Copyright &copy; 2026 Veerendra K - MIT License

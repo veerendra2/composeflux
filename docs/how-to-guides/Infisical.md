@@ -1,116 +1,87 @@
-# Infisical Secrets Manager Setup
+# Infisical Secrets Manager
 
-Set up Infisical as the secrets provider for ComposeFlux.
+Configure [Infisical](https://infisical.com/docs) as a remote secrets provider. ComposeFlux fetches secrets from the
+configured project, environment, and paths, and exposes each value under its secret key name.
 
-> See [Infisical Documentation](https://infisical.com/docs) for more details.
-
-## Steps
-
-### 1. Create a Project
+## 1. Create a project
 
 1. Sign in to Infisical.
 2. Open the **Overview** tab.
-3. Click **Add New Project**.
-4. Create a project for ComposeFlux secrets.
+3. Click **Add New Project** and create a project for ComposeFlux.
 
-![Create Project](../assets/infisical-create-project.png)
+![Adding a new project in Infisical](../assets/infisical-create-project.png)
 
-### 2. Create or Choose an Environment
+## 2. Choose an environment
 
-ComposeFlux uses `INFISICAL_ENVIRONMENT`, so you must provide an environment slug.
+ComposeFlux uses `INFISICAL_ENVIRONMENT`, so an environment slug is required.
 
-1. Open your project.
-2. Create or choose an environment (for example, `prod` or `dev`).
-3. Note the environment slug value.
+1. Open the project.
+2. Create or select an environment, for example `prod`.
+3. Note the environment slug.
 
-![Env Slug](../assets/infisical-env-slug.png)
+![Infisical environment slug](../assets/infisical-env-slug.png)
 
-### 3. Add Secrets
+## 3. Add secrets
 
-Add secrets in the project environment you selected:
+Add the keys referenced by the stacks, for example `DATABASE_PASSWORD` or `API_KEY`.
 
-- If you want ComposeFlux to fetch your Git SSH deploy key from Infisical at startup, create a secret with key
-  `SSH_PRIVATE_KEY` (or another key name and set `GIT_DEPLOY_KEY_SECRET_REF` to match). See
-  [Deploy Key Secret Reference](../GettingStarted.md#deploy-key-secret-reference).
+To fetch the Git deploy key from Infisical, create a secret named `SSH_PRIVATE_KEY` and copy the private key content.
+See [Store the key in a secrets manager](GithubDeployKeys.md#store-the-key-in-a-secrets-manager).
 
-![SSH Key](../assets/infisical-ssh-key.png)
+![Infisical SSH_PRIVATE_KEY secret](../assets/infisical-ssh-key.png)
 
-- Add stack secrets you want exposed as environment variables (for example, `DATABASE_PASSWORD`, `API_KEY`).
+## 4. Optional: organize secrets in folders
 
-### 4. Create Folders (Optional)
+Set `INFISICAL_SECRET_PATH` to the folder used by ComposeFlux. The default is `/`.
 
-Infisical supports organizing secrets in folders. If you use folders, set `INFISICAL_SECRET_PATH` to the folder path
-used by ComposeFlux. 
+Use a comma-separated list to read secrets from several folders, for example `/generic,/apps/prod`:
 
-You can also provide a comma-separated list of paths to aggregate secrets from multiple folders
-(e.g., `/generic,/apps/prod`). This is useful for organizing shared secrets separately from environment-specific ones.
+- If a path cannot be read, ComposeFlux logs a warning and continues with the other paths.
+- If every path fails, the fetch fails.
+- If the same key exists in several paths, the last path's value takes precedence.
 
-**Path behavior:**
-- Secrets are fetched from all specified paths
-- If a path is inaccessible, a warning is logged and other paths are still processed
-- If all paths fail, the operation fails
-- If the same secret key exists in multiple paths, the last path's value takes precedence
+A common layout is shared secrets in `/generic` and environment overrides in `/apps/prod`.
 
-**Example use case:** Use `/generic` for shared secrets (database credentials, API keys) and `/apps/prod` for 
-production-specific overrides (values in `/apps/prod` will override those in `/generic`).
+![Infisical secret folders](../assets/infisical-folders.png)
 
-1. In the **Overview** tab, click **Add Secrets** and select **Add Folder**.
-2. Note the folder path (for example, `/`, `/apps/prod`).
+## 5. Create a machine identity
 
-![Create Folders](../assets/infisical-folders.png)
-
-### 5. Create Machine Identity
-
-1. Go to **Project Settings** -> **Access Control** -> **Machine Identities**.
+1. Open **Project Settings**, then **Access Control**, then **Machine Identities**.
 2. Click **Add Machine Identity to Project**.
-3. Give the machine identity a name and set **Role** to **Viewer**.
+3. Enter a name and set the role to **Viewer**.
 
-![Machine Identity](../assets/infisical-machine-identity.png)
+![Infisical machine identity with project access](../assets/infisical-machine-identity.png)
 
-### 6. Generate Client Credentials
+## 6. Create client credentials
 
-1. Open the machine identity you created.
-2. Expand the **Universal Auth** section in the **Authentication** tab.
+1. Open the machine identity.
+2. In the **Authentication** tab, expand **Universal Auth**.
 3. Click **Add Client Secrets**.
-4. Copy the **Client ID** and **Client Secret**.
+4. Copy the client ID and client secret.
 
-![Client Secrets](../assets/infisical-client-secrets.png)
+![Infisical Universal Auth client secrets](../assets/infisical-client-secrets.png)
 
-### 7. Configuration Checklist
-
-Make sure you have the following values for ComposeFlux:
-
-- **Client ID** - From Universal Auth credentials
-- **Client Secret** - From Universal Auth credentials
-- **Environment** - Environment slug (for example, `prod`, `dev`)
-- **Secret Path** - Folder path where secrets are located. Supports comma-separated paths (default: `/`).
-- **Site URL** - For self-hosted only (default: `https://app.infisical.com`)
-- **Project ID** - Found in project settings (see screenshot below)
-
-![Project ID](../assets/infisical-project-id.png)
-
-## Environment Variables
-
-Add to your `.env` or compose file:
+## 7. Configure ComposeFlux
 
 ```bash
-INFISICAL_CLIENT_ID=<your-client-id>
-INFISICAL_CLIENT_SECRET=<your-client-secret>
+INFISICAL_CLIENT_ID=<client-id>
+INFISICAL_CLIENT_SECRET=<client-secret>
 INFISICAL_ENVIRONMENT=prod
-INFISICAL_PROJECT_ID=<your-project-id>
+INFISICAL_PROJECT_ID=<project-id>
 
-# Optional (supports comma-separated paths)
-INFISICAL_SECRET_PATH=/
+# Optional
+# INFISICAL_SECRET_PATH=/
 # INFISICAL_SITE_URL=https://app.infisical.com
-
-# Optional: only if using a custom key name for SSH deploy key
 # GIT_DEPLOY_KEY_SECRET_REF=SSH_PRIVATE_KEY
 ```
 
-## Usage in Compose Stacks
+The project ID is shown in the project settings.
 
-ComposeFlux fetches secrets from the configured Infisical project/environment/path and exposes them as environment
-variables using each secret key name.
+![Infisical project ID in the project settings](../assets/infisical-project-id.png)
+
+## Use the values
+
+Reference the keys in a stack's Compose file:
 
 ```yaml
 services:
@@ -120,3 +91,6 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       API_KEY: ${API_KEY}
 ```
+
+Keys that are not referenced are not passed to containers. After changing a secret in Infisical, run
+`composeflux sync` to apply it.

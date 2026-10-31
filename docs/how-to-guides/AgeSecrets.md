@@ -1,122 +1,104 @@
-# Age Encrypted Secrets Setup
+# Offline Secrets with Age
 
-Set up offline encrypted secrets management for ComposeFlux using [age](https://github.com/FiloSottile/age).
+ComposeFlux can decrypt [age](https://github.com/FiloSottile/age) encrypted files stored in the Git repository and use
+their values for Compose interpolation. Decryption happens in memory; plaintext is not written to disk.
 
-ComposeFlux natively supports decrypting `*.age` encrypted dotenv files directly in your Git repository at runtime without writing plaintext secrets to disk or calling external third-party secret manager APIs.
+## How it works
 
-## Overview
+- ComposeFlux reads `*.age` files directly from the stack root, each stack directory, and directories pulled in through
+  `include` or `extends`. Subdirectories are not scanned recursively.
+- Each file must be a dotenv file encrypted with a passphrase (`age -p`). ASCII-armored and binary files are both
+  supported.
+- Values are merged in this order: stack root, stack directory, included directory. A later value overrides an earlier
+  one. Files in the same directory are merged in filename order.
+- Offline secrets also override remote secrets. A stack-directory value takes precedence over a stack-root value, which
+  takes precedence over a value fetched from Bitwarden or Infisical.
+- A `*.age` file must be a regular file. Symbolic links are rejected.
+- Values are available only for Compose interpolation. A container receives a value only when its service references it,
+  for example `DATABASE_PASSWORD: ${DATABASE_PASSWORD}`.
+- Committing a change to a `*.age` file triggers a redeploy of the affected stacks.
 
-- Encrypted `.env.age` (or any `*.age`) files are committed directly to your Git repository.
-- Secrets are decrypted in memory using a passphrase (`--age-passphrase` or `AGE_PASSPHRASE`) and made available for Docker Compose interpolation.
-- When `*.age` files are updated in Git, ComposeFlux detects the change and triggers an automatic redeploy.
-- Secret files must be regular files; ComposeFlux rejects symbolic links ending in `*.age`.
-
-## Secret Hierarchy & Layering
-
-ComposeFlux supports layered secrets:
-
-1. **Shared Root Secrets**: Place `*.age` files at the root of your `STACK_PATH` directory (e.g. `stacks/shared.env.age`). These variables are available for interpolation in **all** stacks.
-2. **Stack-Specific Secrets**: Place `*.age` files in the stack directory next to `compose.yml` (e.g. `stacks/nextcloud/secrets.env.age`). These are available only to that stack and override matching keys from shared root secrets.
-3. **Included Subdirectory Secrets**: If a compose file uses `include` directives targeting other directories, any `*.age` files located in those included directories are also loaded and mapped as dependencies.
-
-### Directory Structure Example
+## Directory layout
 
 ```
-your-stacks-repo/
-└── stacks/                       ← STACK_PATH
-    ├── stack.yml
-    ├── shared.env.age            ← Applied to all stacks
-    ├── traefik/
-    │   ├── compose.yml
-    │   └── traefik.env.age       ← Applied to traefik stack only
-    └── nextcloud/
-        ├── compose.yml
-        └── secrets.env.age       ← Applied to nextcloud stack only
+stacks/                     STACK_PATH
+├── stack.yml
+├── shared.env.age          applies to every stack
+├── traefik/
+│   ├── compose.yml
+│   └── traefik.env.age     applies to traefik only
+└── nextcloud/
+    ├── compose.yml
+    └── secrets.env.age     applies to nextcloud only
 ```
 
-## How to Encrypt Secret Files
+## Encrypt a file
 
-### 1. Install `age` CLI
+1. Install the age CLI:
 
-Install the `age` CLI tool on your local machine:
+    ```bash
+    # Debian or Ubuntu
+    apt install age
 
-```bash
-# macOS (Homebrew)
-brew install age
+    # macOS
+    brew install age
+    ```
 
-# Linux (Debian/Ubuntu)
-apt install age
+2. Create a dotenv file with the values to encrypt:
 
-# Arch Linux
-pacman -S age
+    ```bash
+    DATABASE_PASSWORD=supersecretpassword
+    API_KEY=1234567890abcdef
+    ```
 
-# Go
-go install filippo.io/age/cmd/...@latest
-```
+3. Encrypt the file with a passphrase. The `-a` option stores the ciphertext as text:
 
-### 2. Create Plaintext Dotenv File
+    ```bash
+    age -p -a -o stacks/nextcloud/secrets.env.age secrets.env
+    ```
 
-Create your secret environment file (e.g., `.env.secret`):
+4. Remove the plaintext file:
 
-```bash
-DATABASE_PASSWORD=supersecretpassword
-API_KEY=1234567890abcdef
-JWT_SECRET=supersecretjwtkey
-```
+    ```bash
+    rm secrets.env
+    ```
 
-### 3. Encrypt with Passphrase
+5. Commit and push the encrypted file:
 
-Encrypt the file with a passphrase using `age -p`. We recommend ASCII armor (`-a`) so the ciphertext is stored in text format:
+    ```bash
+    git add stacks/nextcloud/secrets.env.age
+    git commit -m "Add nextcloud secrets"
+    git push
+    ```
 
-```bash
-# Encrypt with armor (-a) and passphrase (-p)
-age -p -a -o secrets.env.age .env.secret
-```
+## Configure ComposeFlux
 
-Enter your secure passphrase when prompted.
-
-Delete the unencrypted plaintext file after encryption:
-```bash
-rm .env.secret
-```
-
-### 4. Commit Encrypted File to Git
-
-Commit the `*.age` file to your Git repository:
-
-```bash
-git add secrets.env.age
-git commit -m "Add encrypted secrets for nextcloud"
-git push
-```
-
-## Configuring ComposeFlux
-
-Provide the passphrase to ComposeFlux via the `AGE_PASSPHRASE` environment variable or `--age-passphrase` flag.
-When neither is set, Age secrets are disabled and ComposeFlux does not scan for `*.age` files.
-
-### Compose Example
+Set `AGE_PASSPHRASE` (or the `--age-passphrase` flag) to the passphrase used during encryption. When it is empty,
+offline secrets are disabled and no `*.age` files are read.
 
 ```yaml
 services:
   composeflux:
     image: ghcr.io/veerendra2/composeflux:latest
-    container_name: composeflux
-    restart: unless-stopped
     environment:
       GIT_REPO_URL: git@github.com:user/stacks-repo.git
       STACK_PATH: stacks
       AGE_PASSPHRASE: ${AGE_PASSPHRASE}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.ssh/id_rsa:/.ssh/composeflux_id_rsa:ro
+      - ~/.ssh/composeflux_deploy:/.ssh/composeflux_id_rsa:ro
+      - compose-stack:/opt/compose-stack
+
+volumes:
+  compose-stack:
 ```
 
-Provide `AGE_PASSPHRASE` through a protected runtime environment variable. Do not commit the passphrase to the Compose file or repository. If you use a local `.env` file, exclude it from Git and restrict its file permissions.
+Keep the passphrase in a protected environment variable or a local `.env` file. Do not commit it to the Compose file or
+the stacks repository.
 
-## Usage in Compose Stacks
+## Use the values
 
-Decrypted keys from `*.age` files and shared secrets are available for standard Docker Compose environment interpolation in your compose files:
+Reference the keys in a stack's Compose file:
 
 ```yaml
 services:
@@ -127,4 +109,31 @@ services:
       API_KEY: ${API_KEY}
 ```
 
-ComposeFlux does not automatically add every decrypted key to every container. A value reaches a container only when its Compose service explicitly references the key, as shown above.
+Keys that are not referenced are not passed to containers.
+
+## Edit an encrypted file
+
+The [`agedit`](https://gist.github.com/veerendra2/35c0b81980e81fcb11a86e6cde2f9508) helper decrypts a file into a
+temporary file, opens it in `vim`, and re-encrypts it only when the content changed.
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL https://gist.githubusercontent.com/veerendra2/35c0b81980e81fcb11a86e6cde2f9508/raw -o ~/.local/bin/agedit
+chmod +x ~/.local/bin/agedit
+
+agedit stacks/nextcloud/secrets.env.age
+```
+
+The script requires `age` and `vim`. It writes binary age files, which ComposeFlux supports.
+
+## Troubleshooting
+
+| Symptom                                       | Cause                                                                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `failed to decrypt age file`                  | Wrong `AGE_PASSPHRASE`, or the file was encrypted to an age identity instead of a passphrase.                         |
+| `age secret file must not be a symbolic link` | Replace the link with the encrypted file itself.                                                                      |
+| A file is not loaded                          | The file is nested in a subdirectory, is not located next to a Compose file or stack root, or does not end in `.age`. |
+| A variable is empty in a container            | The service does not reference the variable in its Compose configuration.                                             |
+
+A decryption failure stops the current reconciliation pass. Fix the passphrase or the file, then wait for the next sync
+or run `composeflux sync`.
