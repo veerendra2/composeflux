@@ -112,6 +112,8 @@ func (c *client) Pull(ctx context.Context, project *types.Project) error {
 
 // Up creates and starts a project while reconciling diverged resources.
 func (c *client) Up(ctx context.Context, project *types.Project) error {
+	c.recoverReplaced(ctx, project)
+
 	return c.compose.Up(ctx, project, api.UpOptions{
 		Create: api.CreateOptions{
 			RemoveOrphans:        c.removeOrphans,

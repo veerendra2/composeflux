@@ -70,7 +70,7 @@ func (r *Reconciler) Run(ctx context.Context) error {
 
 		case <-gitTicker.C:
 			func() {
-				checkCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+				checkCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 				defer cancel()
 
 				if r.hasPendingGitSync() {

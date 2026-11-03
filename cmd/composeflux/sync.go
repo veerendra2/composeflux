@@ -23,7 +23,7 @@ func (s *SyncCmd) Run() error {
 	}
 	defer cleanup()
 
-	syncCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	syncCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 
 	slog.Info("Starting one-shot sync")
