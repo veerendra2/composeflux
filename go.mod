@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	filippo.io/age v1.3.2
-	github.com/alecthomas/kong v1.16.1
+	github.com/alecthomas/kong v1.17.0
 	github.com/bitwarden/sdk-go/v2 v2.1.0
 	github.com/compose-spec/compose-go/v2 v2.16.2
 	github.com/distribution/reference v0.6.0
@@ -12,12 +12,12 @@ require (
 	github.com/docker/compose/v5 v5.6.1
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-git/go-git/v5 v5.19.3
-	github.com/infisical/go-sdk v0.9.0
+	github.com/infisical/go-sdk v0.9.1
 	github.com/moby/moby/client v0.6.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/veerendra2/gopackages v1.2.3
-	go.yaml.in/yaml/v4 v4.0.0-rc.6
+	go.yaml.in/yaml/v4 v4.0.0-rc.7
 )
 
 require (
