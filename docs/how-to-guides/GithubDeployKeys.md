@@ -75,6 +75,47 @@ environment:
 
 See [Bitwarden](Bitwarden.md#2-add-secrets) or [Infisical](Infisical.md#3-add-secrets) for adding the secret.
 
+## Trust a self-hosted Git host
+
+The image trusts `github.com` and `gitlab.com` because their host keys are added to
+`/etc/ssh/ssh_known_hosts` at build time. Any other SSH host, such as a self-hosted Gitea, Forgejo, or GitLab, or a server
+on a non-default port, must be added. Without an entry, the clone fails with `knownhosts: key is unknown`.
+
+Generate the file on the Docker host, because the distroless image does not include `ssh-keyscan`:
+
+```bash
+ssh-keyscan git.example.com >> ~/.ssh/composeflux_known_hosts
+```
+
+Do not use `-t` to limit the key type. An entry with only one host key type can fail with `knownhosts: key mismatch`,
+because go-git negotiates a different type. For a non-default SSH port, scan with `-p 2222` and clone with
+`ssh://git@git.example.com:2222/group/repo.git`.
+
+Give the file to the container in one of two ways.
+
+### Mount over the default path
+
+```yaml
+volumes:
+  - ~/.ssh/composeflux_known_hosts:/etc/ssh/ssh_known_hosts:ro
+```
+
+This replaces the built-in file, so add `github.com` and `gitlab.com` entries too if those repositories are used.
+
+### Point SSH_KNOWN_HOSTS at the file
+
+```yaml
+environment:
+  SSH_KNOWN_HOSTS: /config/known_hosts
+volumes:
+  - ~/.ssh/composeflux_known_hosts:/config/known_hosts:ro
+```
+
+When `SSH_KNOWN_HOSTS` is set, go-git uses only that file and ignores `/etc/ssh/ssh_known_hosts`. The file must
+therefore contain every host you connect to, including the well-known providers.
+
+Verify the host fingerprint out of band before trusting a scanned key.
+
 ## Test access
 
 ```bash
