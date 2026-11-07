@@ -169,7 +169,7 @@ func (r *Reconciler) selectStacks(
 		extraFiles = append(extraFiles, loaded.sources.dependencyFiles...)
 		extraFiles = append(extraFiles, loaded.sources.envFiles...)
 		extraFiles = append(extraFiles, state.configFile)
-		dependencies := buildStackDependencies(state.repoPath, loaded.project, extraFiles, secretDirs, loaded.sources.optionalFiles)
+		dependencies := buildStackDependencies(state.repoPath, loaded.project, extraFiles, loaded.sources.dependencyFiles, secretDirs, loaded.sources.optionalFiles)
 		if r.lClient != nil {
 			dependencies.isLocalSecret = r.lClient.IsSecretFile
 		}

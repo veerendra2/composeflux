@@ -27,6 +27,7 @@ type stackDependencies struct {
 	filePaths       []string
 	directoryPaths  []string
 	buildContexts   []string
+	rebuildFiles    map[string]struct{}
 	dockerfiles     map[string]struct{}
 	localSecretDirs map[string]struct{}
 	isLocalSecret   func(string) bool
@@ -156,13 +157,27 @@ func projectDependencyPaths(project *types.Project) dependencyPaths {
 	}
 }
 
+// projectBuildsImages reports whether any service builds an image.
+func projectBuildsImages(project *types.Project) bool {
+	if project == nil {
+		return false
+	}
+	for _, service := range project.Services {
+		if service.Build != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // buildStackDependencies validates and classifies project dependencies used for Git matching.
-func buildStackDependencies(repoPath string, project *types.Project, extraFiles, localSecretDirs []string, optionalFiles map[string]struct{}) stackDependencies {
+func buildStackDependencies(repoPath string, project *types.Project, extraFiles, composeFiles, localSecretDirs []string, optionalFiles map[string]struct{}) stackDependencies {
 	paths := projectDependencyPaths(project)
 	paths.filePaths = append(paths.filePaths, extraFiles...)
 	maps.Copy(paths.optionalFiles, optionalFiles)
 	dependencies := stackDependencies{
 		dockerfiles:     make(map[string]struct{}),
+		rebuildFiles:    make(map[string]struct{}),
 		localSecretDirs: make(map[string]struct{}, len(localSecretDirs)),
 	}
 
@@ -172,9 +187,22 @@ func buildStackDependencies(repoPath string, project *types.Project, extraFiles,
 	for dockerfile := range paths.dockerfiles {
 		dependencies.dockerfiles[dockerfile] = struct{}{}
 	}
+	// Compose sources can change build arguments, including ones removed before load.
+	if projectBuildsImages(project) {
+		for _, path := range composeFiles {
+			if pathWithinRoot(repoPath, path) {
+				dependencies.rebuildFiles[filepath.Clean(path)] = struct{}{}
+			}
+		}
+	}
 
 	defaultEnvPath := filepath.Join(project.WorkingDir, ".env")
+	seenFiles := make(map[string]struct{}, len(paths.filePaths))
 	for _, path := range paths.filePaths {
+		if _, ok := seenFiles[path]; ok {
+			continue
+		}
+		seenFiles[path] = struct{}{}
 		if !pathWithinRoot(repoPath, path) {
 			continue
 		}
@@ -245,6 +273,9 @@ func (d stackDependencies) impact(changedPaths map[string]gitrepo.ChangeAction) 
 			if changedPath == filePath {
 				if _, ok := d.dockerfiles[filePath]; ok {
 					match.reason = "dockerfile"
+					match.rebuild = true
+				} else if _, ok := d.rebuildFiles[filePath]; ok {
+					match.reason = "compose_build_source"
 					match.rebuild = true
 				} else if match.reason == "" {
 					match.reason = "dependency_file"
