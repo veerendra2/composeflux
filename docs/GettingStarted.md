@@ -10,6 +10,9 @@ Install ComposeFlux on a Docker host and connect it to a Git repository of Compo
 - A Git repository reachable over SSH that contains the Compose stacks.
 - Read access to the repository through an SSH key. The key can be mounted into the container or stored in a supported
   secrets manager.
+- Host key trust for the Git host. `github.com` and `gitlab.com` are included in the image; any other SSH host needs a
+  `known_hosts` file, as described in
+  [Trust a self-hosted Git host](how-to-guides/GithubDeployKeys.md#trust-a-self-hosted-git-host).
 - Optional: an Age passphrase or Bitwarden/Infisical credentials for secrets.
 
 See [GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md) for creating a read-only key.
