@@ -29,7 +29,11 @@ those external paths cannot trigger reconciliation.
 | ComposeFlux stack config | No | Not applicable | The configuration path must remain inside the configured stack root. |
 
 Paths inside the repository are monitored when ComposeFlux recognizes them as dependencies. A matching Git change can
-trigger stack deployment, and changes within an in-repository build context can also trigger an image rebuild.
+trigger stack deployment, and changes within an in-repository build context can also trigger an image rebuild. A stack
+that contains a service with a `build:` section is also rebuilt when an existing in-repository Compose source file
+changes, because build arguments and other build settings are resolved before the project is loaded. This includes
+changes that remove build arguments. Deleting a Compose file is not detected, because dependencies are collected from
+the checked-out revision. Changes to environment files do not trigger a rebuild.
 
 ## Boundary Enforcement
 
@@ -74,3 +78,5 @@ to them are not currently detected.
   external dependency.
 - A successful deployment does not prove that every external build input was rebuilt. When rebuilding is not selected,
   Compose can reuse an existing image.
+- A change to an environment file that supplies a `build.args` value deploys the stack without rebuilding its image.
+  Force a rebuild with `composeflux sync` or a Compose source change.

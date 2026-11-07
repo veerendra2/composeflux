@@ -50,6 +50,13 @@ OCI) are passed to Compose when the project is loaded, so they can affect the de
 track them: a change to a remote include does not trigger a deployment, and secrets in the remote location are not
 loaded. Paths that escape the repository are rejected.
 
+!!! warning "Compose changes rebuild images"
+
+    When a stack builds an image, changing any of its Compose source files rebuilds that image before deployment, even
+    if the edit did not touch build arguments. This keeps build-time values from going stale, at the cost of some
+    unnecessary rebuilds. Changes to `.env`, service `env_file`, `stack.yml`, and secret files deploy the stack without
+    rebuilding; run `composeflux sync` to force a rebuild after changing one of them.
+
 !!! warning "The project name must match the directory name"
 
     Do not set a `name:` in the Compose file that differs from the stack directory name. ComposeFlux treats the
