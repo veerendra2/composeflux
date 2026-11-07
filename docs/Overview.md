@@ -54,8 +54,9 @@ loaded. Paths that escape the repository are rejected.
 
     When a stack builds an image, changing any of its Compose source files rebuilds that image before deployment, even
     if the edit did not touch build arguments. This keeps build-time values from going stale, at the cost of some
-    unnecessary rebuilds. Changes to `.env`, service `env_file`, `stack.yml`, and secret files deploy the stack without
-    rebuilding; run `composeflux sync` to force a rebuild after changing one of them.
+    unnecessary rebuilds. Changes to `.env`, service `env_file`, `stack.yml`, and secret files do not trigger a rebuild
+    on their own, unless the file is also inside a tracked build context. Run `composeflux sync` to force a rebuild
+    after changing one of them.
 
 !!! warning "The project name must match the directory name"
 

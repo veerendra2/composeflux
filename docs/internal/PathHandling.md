@@ -33,7 +33,8 @@ trigger stack deployment, and changes within an in-repository build context can 
 that contains a service with a `build:` section is also rebuilt when an existing in-repository Compose source file
 changes, because build arguments and other build settings are resolved before the project is loaded. This includes
 changes that remove build arguments. Deleting a Compose file is not detected, because dependencies are collected from
-the checked-out revision. Changes to environment files do not trigger a rebuild.
+the checked-out revision. Environment files do not trigger a rebuild on their own, unless they sit inside a tracked
+build context.
 
 ## Boundary Enforcement
 
@@ -78,5 +79,6 @@ to them are not currently detected.
   external dependency.
 - A successful deployment does not prove that every external build input was rebuilt. When rebuilding is not selected,
   Compose can reuse an existing image.
-- A change to an environment file that supplies a `build.args` value deploys the stack without rebuilding its image.
-  Force a rebuild with `composeflux sync` or a Compose source change.
+- A change to an environment file that supplies a `build.args` value deploys the stack without rebuilding its image,
+  unless the file is also inside a tracked build context. Force a rebuild with `composeflux sync` or a Compose source
+  change.
