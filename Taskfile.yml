@@ -76,7 +76,7 @@ tasks:
     deps:
       - vet
     cmds:
-      - go test ./...
+      - go test -race ./...
 
   build:
     desc: Build the application binary for the current platform
