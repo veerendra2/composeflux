@@ -3,9 +3,7 @@ package reconcile
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -237,6 +235,8 @@ func sourceLoadOptions(options *loader.Options) {
 	options.SkipResolveLabels = true
 	options.SkipInclude = true
 	options.SkipExtends = true
+	// Registered remote loaders keep remote include and extends references unresolved; local files never use them.
+	options.ResourceLoaders = slices.Clone(composeRemoteLoaders)
 }
 
 // interpolateSourceReferences applies Compose interpolation only to include and extends declarations.
@@ -373,28 +373,8 @@ func (w *composeSourceWalker) addEnvFile(path string) {
 }
 
 // sourceWalkKey hashes a source load's paths and effective environment for cycle detection.
+// %q quotes every value, and fmt prints map keys in sorted order, so the key is unambiguous and stable.
 func sourceWalkKey(composeFiles []string, workingDir string, environment types.Mapping) string {
-	keys := slices.Sorted(maps.Keys(environment))
-	digest := sha256.New()
-	var length [8]byte
-	writeUint64 := func(value uint64) {
-		binary.BigEndian.PutUint64(length[:], value)
-		_, _ = digest.Write(length[:])
-	}
-	writeString := func(value string) {
-		writeUint64(uint64(len(value)))
-		_, _ = digest.Write([]byte(value))
-	}
-
-	writeString(workingDir)
-	writeUint64(uint64(len(composeFiles)))
-	for _, composeFile := range composeFiles {
-		writeString(composeFile)
-	}
-	writeUint64(uint64(len(keys)))
-	for _, key := range keys {
-		writeString(key)
-		writeString(environment[key])
-	}
-	return string(digest.Sum(nil))
+	digest := sha256.Sum256(fmt.Appendf(nil, "%q%q%q", workingDir, composeFiles, map[string]string(environment)))
+	return string(digest[:])
 }
