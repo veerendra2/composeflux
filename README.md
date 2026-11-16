@@ -34,16 +34,16 @@ and deploys the affected Docker stacks without manual intervention.
 
 ## Features
 
-| Feature                  | Description                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------- |
-| GitOps driven            | Deployments follow the Git repository                                                         |
-| Change detection         | Only stacks affected by a commit are redeployed                                               |
-| Lightweight and headless | Single container, no UI, no database, no control plane                                        |
-| Pure Go implementation   | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/), no shell execution |
-| Offline secrets          | `*.age` files in the repository are decrypted in memory                                       |
-| Remote secrets           | Optional Bitwarden Secrets Manager and Infisical support                                      |
-| Automatic image updates  | Scheduled registry checks redeploy stacks when newer images are available                     |
-| Flexible configuration   | Deployment order and shared environment variables                                             |
+| Feature                  | Description                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| GitOps driven            | Deployments follow the Git repository                                                                  |
+| Change detection         | Only stacks affected by a commit are redeployed                                                        |
+| Lightweight and headless | Single container, no UI, no database, no control plane                                                 |
+| Pure Go implementation   | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/), no shell execution          |
+| Offline secrets          | `*.age` files in the repository are decrypted in memory with [age](https://github.com/FiloSottile/age) |
+| Remote secrets           | Optional Bitwarden Secrets Manager and Infisical support                                               |
+| Automatic image updates  | Scheduled registry checks redeploy stacks when newer images are available                              |
+| Flexible configuration   | Deployment order and shared environment variables                                                      |
 
 ## Blog Posts
 

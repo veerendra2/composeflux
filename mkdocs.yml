@@ -10,10 +10,11 @@ edit_uri: edit/main/docs/
 exclude_docs: |
   internal/
   superpowers/
+  overrides/
 
 theme:
   name: material
-  custom_dir: overrides
+  custom_dir: docs/overrides
   favicon: assets/favicon.svg
   features:
     - navigation.instant

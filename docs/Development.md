@@ -49,7 +49,7 @@ source venv/bin/activate
 Install MkDocs dependencies:
 
 ```bash
-pip install mkdocs-material
+pip install -r requirements.txt
 ```
 
 Serve documentation locally:
