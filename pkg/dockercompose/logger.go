@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 )
@@ -63,22 +64,16 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 
 // slogHook forwards logrus logs to slog.
 type slogHook struct {
-	mu        sync.RWMutex
-	stackName string
+	stackName atomic.Value
 }
 
 // setStackName sets the stack attribute attached to forwarded Docker logs.
-func (h *slogHook) setStackName(name string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.stackName = name
-}
+func (h *slogHook) setStackName(name string) { h.stackName.Store(name) }
 
 // getStackName safely returns the current Docker log stack attribute.
 func (h *slogHook) getStackName() string {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.stackName
+	name, _ := h.stackName.Load().(string)
+	return name
 }
 
 // Levels enables forwarding for every logrus level emitted by the Docker SDK.

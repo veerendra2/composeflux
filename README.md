@@ -17,6 +17,7 @@
 <img src="https://img.shields.io/github/stars/veerendra2/composeflux?style=flat&logo=github" alt="Stars">
 <img src="https://img.shields.io/github/forks/veerendra2/composeflux?style=flat&logo=github" alt="Forks">
 <a href="https://github.com/veerendra2/composeflux/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/veerendra2/composeflux/ci.yml?style=flat&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
+<a href="https://codecov.io/gh/veerendra2/composeflux"><img src="https://img.shields.io/codecov/c/github/veerendra2/composeflux?style=flat&logo=codecov&logoColor=white" alt="Coverage"></a>
 <a href="https://github.com/veerendra2/composeflux/releases/latest"><img src="https://img.shields.io/github/v/release/veerendra2/composeflux?style=flat&logo=github" alt="Release"></a>
 <a href="https://ghcr.io/veerendra2/composeflux"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64-blue?style=flat&logo=docker&logoColor=white" alt="Docker"></a>
 <img src="https://img.shields.io/badge/Image%20Size-~50%20MB-blue?style=flat&logo=docker&logoColor=white" alt="Docker image size">
@@ -33,16 +34,16 @@ and deploys the affected Docker stacks without manual intervention.
 
 ## Features
 
-| Feature                  | Description                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------- |
-| GitOps driven            | Deployments follow the Git repository                                                         |
-| Change detection         | Only stacks affected by a commit are redeployed                                               |
-| Lightweight and headless | Single container, no UI, no database, no control plane                                        |
-| Pure Go implementation   | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/), no shell execution |
-| Offline secrets          | `*.age` files in the repository are decrypted in memory                                       |
-| Remote secrets           | Optional Bitwarden Secrets Manager and Infisical support                                      |
-| Automatic image updates  | Scheduled registry checks redeploy stacks when newer images are available                     |
-| Flexible configuration   | Deployment order and shared environment variables                                             |
+| Feature                  | Description                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| GitOps driven            | Deployments follow the Git repository                                                                  |
+| Change detection         | Only stacks affected by a commit are redeployed                                                        |
+| Lightweight and headless | Single container, no UI, no database, no control plane                                                 |
+| Pure Go implementation   | Native Docker [Compose SDK](https://docs.docker.com/compose/compose-sdk/), no shell execution          |
+| Offline secrets          | `*.age` files in the repository are decrypted in memory with [age](https://github.com/FiloSottile/age) |
+| Remote secrets           | Optional Bitwarden Secrets Manager and Infisical support                                               |
+| Automatic image updates  | Scheduled registry checks redeploy stacks when newer images are available                              |
+| Flexible configuration   | Deployment order and shared environment variables                                                      |
 
 ## Blog Posts
 

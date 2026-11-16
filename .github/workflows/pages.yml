@@ -9,7 +9,6 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - "requirements.txt"
-      - "overrides/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

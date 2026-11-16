@@ -176,7 +176,7 @@ func (c *client) HasUpdates(ctx context.Context) (bool, string, string, error) {
 	}
 
 	if err != nil {
-		return false, shortSHA(localSHA), "", err
+		return false, "", shortSHA(localSHA), err
 	}
 
 	remoteRef, err := c.remoteReference()

@@ -54,9 +54,9 @@ BITWARDEN_PROJECT_ID=<project-id>
 # Optional: only when fetching the SSH deploy key from Bitwarden
 GIT_DEPLOY_KEY_SECRET_REF=<secret-id>
 
-# Optional: only for self-hosted Bitwarden
-# BITWARDEN_API_URL=https://vault.bitwarden.com/api
-# BITWARDEN_IDENTITY_URL=https://vault.bitwarden.com/identity
+# Optional: only for the EU cloud or self-hosted Bitwarden
+# BITWARDEN_API_URL=https://vault.bitwarden.eu/api
+# BITWARDEN_IDENTITY_URL=https://vault.bitwarden.eu/identity
 ```
 
 ## Use the values

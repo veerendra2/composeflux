@@ -2,6 +2,12 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     paths:
@@ -30,10 +36,32 @@ jobs:
           working-directory: ./
           args: --timeout 10m
 
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Run Tests
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v7.1.1
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   docker-build:
     name: Build & Push Dev Image
     if: contains(github.event.pull_request.labels.*.name, 'build')
-    needs: golangci-lint
+    needs: [golangci-lint, test]
     uses: ./.github/workflows/docker-build-push.yml
     permissions:
       contents: read

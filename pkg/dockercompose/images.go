@@ -10,7 +10,6 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/distribution/reference"
 	dockerconfigtypes "github.com/docker/cli/cli/config/types"
-	dockerregistry "github.com/docker/docker/registry"
 	mobyClient "github.com/moby/moby/client"
 )
 
@@ -70,11 +69,7 @@ func (c *client) HasImageUpdates(ctx context.Context, project *types.Project) (b
 
 // registryAuth encodes Docker CLI credentials for a registry manifest request.
 func (c *client) registryAuth(named reference.Named) string {
-	repoInfo, err := dockerregistry.ParseRepositoryInfo(named)
-	if err != nil {
-		return ""
-	}
-	auth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(repoInfo.Index.Name)
+	auth, _ := c.dockerCLI.ConfigFile().GetAuthConfig(reference.Domain(named))
 	encoded, err := json.Marshal(dockerconfigtypes.AuthConfig(auth))
 	if err != nil {
 		return ""

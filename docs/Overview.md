@@ -9,6 +9,13 @@ ComposeFlux reconciles the Docker stacks located under a path (`STACK_PATH`) in 
 deploy key. It is standalone: there is no central management service, UI, or database. Managing stacks on a host
 therefore means running ComposeFlux on that host and pointing `STACK_PATH` at the directory that holds those stacks.
 
+Every `GIT_INTERVAL`, ComposeFlux:
+
+1. Pulls the Git repository.
+2. Finds the stacks affected by the new commits.
+3. Loads their secrets and deploys them with Docker Compose.
+4. Removes stacks whose directories were deleted from Git.
+
 ## Structure
 
 Stacks are organized into directories under `STACK_PATH`, ideally one directory per server.
@@ -49,6 +56,9 @@ referenced files are inside the same repository, where changes to them trigger r
 OCI) are passed to Compose when the project is loaded, so they can affect the deployed project, but ComposeFlux does not
 track them: a change to a remote include does not trigger a deployment, and secrets in the remote location are not
 loaded. Paths that escape the repository are rejected.
+
+Deleting a stack directory from Git removes the stack with `docker compose down`: its containers and networks are
+removed, and its named volumes are kept. This also applies to suspended stacks.
 
 !!! warning "Compose changes rebuild images"
 
@@ -115,8 +125,9 @@ running, the next invocation is skipped.
 
 !!! warning "Pruning applies to the whole Docker host"
 
-    Pruning is not limited to ComposeFlux stacks. It removes all unused volumes, all dangling images, and all build
-    cache. Containers and networks are not pruned.
+    Pruning is not limited to ComposeFlux stacks. It removes unused anonymous volumes, all dangling images, and all
+    build cache. Named volumes are kept on Docker Engine 23 and later; older versions also remove unused named volumes.
+    Containers and networks are not pruned.
 
 Pruning runs only when every stack under `STACK_PATH` is running in Docker, healthy, and not suspended. Otherwise the
 cycle is skipped and a warning is logged.
@@ -135,49 +146,11 @@ ComposeFlux supports two secret sources, which can be used together:
     Only [age](https://github.com/FiloSottile/age) with passphrase encryption is supported. Files with the `.age`
     extension are discovered automatically and decrypted with `AGE_PASSPHRASE` (`--age-passphrase`).
 
-Offline secrets are dotenv files encrypted with a passphrase and committed to the stack repository. During
-reconciliation ComposeFlux discovers the `*.age` files that apply to a stack, decrypts each one in memory, parses it as
-dotenv, and exports the keys as environment variables for Compose interpolation while the stack is brought up.
-Plaintext is never written to disk, and the keys are available to the Compose file for interpolation only.
-
-A `.age` file inside a stack directory provides secrets for that stack. A `.age` file in the root of `STACK_PATH`
-provides secrets for every stack in that stack path, that is, shared secrets.
-
-Create a dotenv file containing the values to encrypt:
-
-```bash
-TOKEN=my-token
-```
-
-Encrypt it with a passphrase and remove the plaintext file:
-
-```bash
-age -p -o .env.secrets.age .env_secrets
-rm .env_secrets
-```
-
-The encrypted file is kept next to the stack it belongs to:
-
-```
-servers/wg1-ams/wg-easy/
-├── .env.secrets.age
-├── compose.override.yml
-└── compose.yml
-```
+Offline secrets are dotenv files encrypted with a passphrase and committed to the repository. A `.age` file in a stack
+directory applies to that stack; a `.age` file in the root of `STACK_PATH` applies to every stack. Decrypted values are
+used for Compose interpolation only and are never written to disk.
 
 ![Age secret files at the stack root and inside a stack directory](./assets/offline-secrets.png)
-
-The Compose file references the exported keys:
-
-```yaml
-name: wg-easy
-
-services:
-  wg-easy:
-    image: ghcr.io/wg-easy/wg-easy:latest
-    environment:
-      TOKEN: ${TOKEN} # decrypted from the .age vault and exported while bringing up the stack
-```
 
 See [Offline Secrets with Age](how-to-guides/AgeSecrets.md) for the full workflow.
 
@@ -231,22 +204,16 @@ Besides the labels added by ComposeFlux, services can carry labels that control 
 
 `composeflux.health.suspend`
 
-When this label is set on any service in the Compose file, ComposeFlux stops managing the stack: no Git deployment,
-health recovery, or image updates, and the resource prune cycle is skipped.
-
-Example
+Despite its name, this label suspends the whole stack, not only health checks. When it is set on any service,
+ComposeFlux skips Git deployment, health recovery, and image updates for the stack, and skips the resource prune cycle.
+Remove the label in Git to resume.
 
 ```yaml
----
-name: actualbudget
 services:
   actualbudget:
     image: docker.io/actualbudget/actual-server:latest
-    container_name: actualbudget
-    restart: unless-stopped
     labels:
       - composeflux.health.suspend=true
-    hostname: actualbudget
 ```
 
 ### Init
@@ -257,36 +224,26 @@ When [health reconciliation](#health-reconciliation) is enabled, a
 [one-shot container](https://docs.docker.com/compose/how-tos/init-containers) in a stack can be marked so that
 ComposeFlux does not treat its exit as a failure. Add this label to the service.
 
-Example
-
 ```yaml
----
-name: valkey
 services:
   init-change-ownership: # one-shot container
     image: busybox:latest
     labels:
-      - composeflux.init=true # health checks succeed even though this container exits with code 0
+      - composeflux.init=true # a zero exit code counts as healthy
     volumes:
       - valkey_data:/tmp/change-ownership
-    environment:
-      PUID: ${PUID}
-      PGID: ${PGID}
     command: chown -R ${PUID}:${PGID} /tmp/change-ownership
 
   valkey:
     image: valkey/valkey:8-alpine
-    container_name: valkey
     depends_on:
       init-change-ownership:
         condition: service_completed_successfully
     volumes:
       - valkey_data:/data
-    user: ${PUID}:${PGID}
-    hostname: valkey
+
 volumes:
   valkey_data:
-    name: valkey_data
 ```
 
 ### Exclude Image Update
@@ -295,19 +252,12 @@ volumes:
 
 This label excludes a stack from automatic image updates.
 
-Example
-
 ```yaml
----
-name: actualbudget
 services:
   actualbudget:
     image: docker.io/actualbudget/actual-server:latest
-    container_name: actualbudget
-    restart: unless-stopped
     labels:
       - composeflux.image-update.exclude=true
-    hostname: actualbudget
 ```
 
 ## Limitations

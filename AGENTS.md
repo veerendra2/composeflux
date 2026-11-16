@@ -29,16 +29,22 @@ task run            # go run ./cmd/composeflux (runs vet first)
 task fmt            # go fmt ./...
 task vet            # go vet ./...
 task lint           # golangci-lint run --timeout 3m
-task test           # go test ./...
+task test           # go test -race ./...
 task security       # govulncheck ./...
 task all            # fmt + lint + vet + security + test (full local CI)
 task build-docker   # docker build -t composeflux .
 task install        # Install govulncheck and golangci-lint
 ```
 
-Single test: `go test -v ./internal/reconcile/... -run TestFunctionName`; race detector: `go test -race ./...`
+Focused specs: `go test ./internal/reconcile -ginkgo.focus "GitSync"`; coverage: `go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out`.
 
-> No `*_test.go` files exist yet. Use Go's standard `testing` package; `testify` is available as a transitive dependency.
+## Testing
+
+- Use Ginkgo v2 + Gomega (`Describe`/`Context`/`It`, `DescribeTable` for input/output variations). Each tested package has one `suite_test.go` with the `RunSpecs` entry point and its `//go:generate` directives.
+- Mock interfaces with gomock. Generated mocks live in `mock_*_test.go`; regenerate them with `go generate ./...` (`mockgen` is declared as a `tool` in `go.mod`). Never edit generated mocks by hand.
+- Tests must be deterministic and independent: use `GinkgoT().TempDir()`, `GinkgoT().Setenv`, and `DeferCleanup` instead of shared state, and never require a Docker daemon, network access, or real secret providers. Use local Git repositories and `httptest` servers instead.
+- `pkg/gitrepo` and `cmd/composeflux` tests need the `git` binary on `PATH`.
+- `internal/reconcile` tests share the `fixture` in `helpers_test.go`, which loads real Compose projects from a temp repo with mocked clients.
 
 ---
 
@@ -62,7 +68,7 @@ Preserve them in future changes; do not reopen them unless a new requirement or 
 - **Project identity**: Reject loaded projects whose Compose name differs from the stack directory name, before building or deploying them. Custom names are not a supported feature. Do not add automatic renaming or custom-name support as a cleanup.
 - **Cron lifecycle**: Skip overlapping image-update jobs with the existing cron wrapper and wait for active jobs before returning from `Run` and closing clients. Recheck cancellation after acquiring the reconciliation mutex, before starting image-update work. Waiting may delay shutdown if a provider call is stuck; a timeout must not close a native client still in use.
 - **SDK cancellation limits**: Bitwarden calls do not accept a context. The pinned Infisical v0.8.0 constructor context controls token-refresh lifecycle, not individual secret HTTP requests. Do not claim that passing a context to the constructor enforces request deadlines, or wrap blocking SDK calls in abandoned goroutines.
-- **Tests are deferred**: Do not add test cases until the maintainer explicitly resumes that work. Continue using the existing formatting, vet, lint, and build tooling for code changes.
+- **Tests**: Add or update tests for behavior changes, following the Testing section. Refactor production code for testability only when a test cannot be written otherwise, and get maintainer approval first.
 
 Build-argument dependency tracking is explicitly deferred to [issue #74](https://github.com/veerendra2/composeflux/issues/74);
 do not implement it as part of the current cleanup. Remote-request timeout changes still require implementation approval.
@@ -123,7 +129,7 @@ ctx.FatalIfErrorf(ctx.Run())                                            // 5. Fa
 
 ## CI / GitHub Actions
 
-- **`ci.yml`**: Runs `golangci-lint` on all pull requests. Run `task lint` locally before opening a PR.
+- **`ci.yml`**: Runs `golangci-lint` and `go test -race ./...` on pull requests and pushes to `main`, and uploads coverage to Codecov (`CODECOV_TOKEN` secret) for the README badge. Run `task lint` and `task test` locally before opening a PR.
 - **`release.yml`**: Builds and pushes multi-arch images (`linux/amd64`, `linux/arm64`) to `ghcr.io` on semver tags (`v*.*.*`).
 
 Internal engineering and research notes belong under `docs/internal/`; keep it covered by MkDocs `exclude_docs` and out of site navigation.

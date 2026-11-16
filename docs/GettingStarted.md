@@ -21,14 +21,30 @@ See [GitHub Deploy Keys](how-to-guides/GithubDeployKeys.md) for creating a read-
 
 The following configuration deploys every stack under `stacks/` in the repository.
 
-1. Create a `.env` file:
+1. Add a stack to the repository, one directory per stack under `STACK_PATH`:
+
+    ```
+    stacks/
+    └── whoami/
+        └── compose.yml
+    ```
+
+    ```yaml
+    services:
+      whoami:
+        image: traefik/whoami:latest
+        ports:
+          - "8080:80"
+    ```
+
+2. Create a `.env` file:
 
     ```bash
     GIT_REPO_URL=git@github.com:user/stacks-repo.git
     STACK_PATH=stacks
     ```
 
-2. Create `compose.yml`:
+3. Create `compose.yml`:
 
     ```yaml
     services:
@@ -48,7 +64,7 @@ The following configuration deploys every stack under `stacks/` in the repositor
       compose-stack:
     ```
 
-3. Start ComposeFlux:
+4. Start ComposeFlux:
 
     ```bash
     docker compose up -d
@@ -57,6 +73,8 @@ The following configuration deploys every stack under `stacks/` in the repositor
 
 The mounted key must be readable by the container and must not have a passphrase. The named volume keeps the Git clone
 between restarts. If the initial sync fails, the process exits with the error in the log.
+
+After startup, push a change under `stacks/` and ComposeFlux deploys it within `GIT_INTERVAL` (default `5m`).
 
 The SSH deploy key can also be fetched from a remote secrets manager (Bitwarden or Infisical) by setting
 `GIT_DEPLOY_KEY_SECRET_REF`. For Bitwarden the value is the secret ID; for Infisical it is the secret key name. See
@@ -265,3 +283,13 @@ docker compose ls
 ```
 
 A successful sync logs a `Stack deployment summary` with counts for deployed, failed, and skipped stacks.
+
+## Troubleshooting
+
+| Symptom                                       | What to do                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| A change is not deployed yet                  | Wait for `GIT_INTERVAL`, or run `docker exec composeflux /composeflux sync`.                                  |
+| A stack is skipped without a clear reason     | Set `LOG_LEVEL=DEBUG`. Suspended and excluded stacks are logged at debug level.                               |
+| `compose project name ... must match ...`     | Remove `name:` from the Compose file, or make it equal to the stack directory name.                           |
+| `knownhosts: key is unknown`                  | See [Trust a self-hosted Git host](how-to-guides/GithubDeployKeys.md#trust-a-self-hosted-git-host).           |
+| `failed to decrypt age file`                  | See [Offline Secrets troubleshooting](how-to-guides/AgeSecrets.md#troubleshooting).                           |
