@@ -19,6 +19,15 @@ pkg/remotesecrets/      # Remote secret providers (Bitwarden, Infisical; optiona
 docs/                   # MkDocs documentation (docs/internal/ excluded from the site)
 ```
 
+## Communication
+
+- Write for a busy maintainer: short, plain, and easy to understand on one read.
+- Lead with the point. Say what you did, what it means, and what comes next.
+- Prefer everyday words over jargon, and explain a technical term the first time it matters.
+- Use a small table, numbered list, or before/after example when it is clearer than a paragraph.
+- State the recommendation and the reason in one line. Do not list every option unless the choice is real.
+- Call out behavior changes and risks plainly. No filler, no marketing tone.
+
 ## Build, Lint, Test Commands
 
 The project uses [Task](https://taskfile.dev/) (`Taskfile.yml`):
@@ -61,8 +70,9 @@ Preserve them in future changes; do not reopen them unless a new requirement or 
 - **Git checkout ownership (#54)**: Git is the source of truth. Before startup checkout or upstream reset, discard local changes to tracked files and warn with their paths. Preserve unrelated untracked files; do not add `git clean` or unrestricted go-git `HardReset`/forced checkout. Reset changed tracked paths explicitly, then use normal checkout or `MergeReset` for the target revision. Do not stash, commit, or merge application-written local changes.
 - **Stack configuration failures**: A missing optional `stack.yml` is acceptable. A malformed or unreadable existing file must stop that reconciliation pass rather than substitute empty environment variables or startup order. Initial-sync errors exit; periodic errors are logged without exiting.
 - **Infisical partial results**: Keep successful paths when another configured secret path fails, and log a warning for each failed path. Fail if every path fails. This best-effort policy is intentional.
-- **Suspension source of truth**: Read `composeflux.health.suspend=true` from the loaded Git Compose project, not from stale running-container labels. Any active service with that label suspends the entire stack: skip Git deployment (including force sync), health recovery, and image updates. Suspend also blocks the entire periodic Docker resource-prune pass.
+- **Suspension source of truth**: Read `composeflux.health.suspend=true` from the loaded Git Compose project, not from stale running-container labels. Any active service with that label suspends the entire stack: skip Git deployment (including force sync), health recovery, and image updates.
 - **Suspension lifecycle**: Adding the label in Git does not require redeploying it onto running containers. Removing the label in Git resumes management once the change is pulled. Deleting the stack from Git explicitly requests removal, so `PruneStacks` still removes it even if its old containers carry a suspension label.
+- **Docker resource pruning**: Prune is host-wide. Images use `dangling=false`, so unused tagged images are removed; Docker protects every image referenced by a container, running or stopped. Volumes are anonymous-only, networks and build cache are pruned, and containers are not pruned. Do not gate pruning on stack health, and do not reimplement Docker's in-use reference tracking.
 - **Dependency boundaries**: Retain missing in-repository bind sources so Git deletions of a file or directory contents still match. Do not start tracking external host paths. Directory-secret caching must avoid repeated decryption while reapplying cached values to every source-load environment that visits that directory.
 - **Validate before side effects**: Require `GIT_INTERVAL > 0`, nonnegative optional health/prune intervals, and a valid nonempty image-update cron expression before initializing clients.
 - **Project identity**: Reject loaded projects whose Compose name differs from the stack directory name, before building or deploying them. Custom names are not a supported feature. Do not add automatic renaming or custom-name support as a cleanup.

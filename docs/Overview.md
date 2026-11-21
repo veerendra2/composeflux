@@ -125,12 +125,16 @@ running, the next invocation is skipped.
 
 !!! warning "Pruning applies to the whole Docker host"
 
-    Pruning is not limited to ComposeFlux stacks. It removes unused anonymous volumes, all dangling images, and all
-    build cache. Named volumes are kept on Docker Engine 23 and later; older versions also remove unused named volumes.
-    Containers and networks are not pruned.
+    Pruning is not limited to ComposeFlux stacks.
 
-Pruning runs only when every stack under `STACK_PATH` is running in Docker, healthy, and not suspended. Otherwise the
-cycle is skipped and a warning is logged.
+    - **Images:** every unused image, tagged or untagged. Docker keeps any image a container uses.
+    - **Volumes:** unused anonymous volumes. Named volumes are kept on Docker Engine 23 and later; older versions also
+      remove unused named volumes.
+    - **Networks:** unused networks.
+    - **Build cache:** all build cache.
+    - **Containers:** not pruned.
+
+Pruning runs whether stacks are healthy, suspended, or stopped. A suspended stack does not block the pass.
 
 ## Secrets
 
@@ -205,8 +209,7 @@ Besides the labels added by ComposeFlux, services can carry labels that control 
 `composeflux.health.suspend`
 
 Despite its name, this label suspends the whole stack, not only health checks. When it is set on any service,
-ComposeFlux skips Git deployment, health recovery, and image updates for the stack, and skips the resource prune cycle.
-Remove the label in Git to resume.
+ComposeFlux skips Git deployment, health recovery, and image updates for the stack. Remove the label in Git to resume.
 
 ```yaml
 services:
