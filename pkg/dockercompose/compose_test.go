@@ -107,24 +107,28 @@ var _ = Describe("client", func() {
 	})
 
 	Describe("Prune", func() {
-		It("prunes volumes, dangling images, and all build cache", func() {
-			docker.EXPECT().VolumePrune(ctx, mobyClient.VolumePruneOptions{}).Return(mobyClient.VolumePruneResult{}, nil)
-			docker.EXPECT().ImagePrune(ctx, gomock.Any()).DoAndReturn(
-				func(_ context.Context, options mobyClient.ImagePruneOptions) (mobyClient.ImagePruneResult, error) {
-					Expect(options.Filters).To(HaveKeyWithValue("dangling", HaveKey("true")))
-					return mobyClient.ImagePruneResult{}, nil
-				})
-			docker.EXPECT().BuildCachePrune(ctx, mobyClient.BuildCachePruneOptions{All: true}).Return(mobyClient.BuildCachePruneResult{}, nil)
+		It("prunes all unused images, anonymous volumes, unused networks, and all build cache", func() {
+			gomock.InOrder(
+				docker.EXPECT().ImagePrune(ctx, mobyClient.ImagePruneOptions{
+					Filters: mobyClient.Filters{}.Add("dangling", "false"),
+				}).Return(mobyClient.ImagePruneResult{}, nil),
+				docker.EXPECT().VolumePrune(ctx, mobyClient.VolumePruneOptions{}).Return(mobyClient.VolumePruneResult{}, nil),
+				docker.EXPECT().NetworkPrune(ctx, mobyClient.NetworkPruneOptions{}).Return(mobyClient.NetworkPruneResult{}, nil),
+				docker.EXPECT().BuildCachePrune(ctx, mobyClient.BuildCachePruneOptions{All: true}).Return(mobyClient.BuildCachePruneResult{}, nil),
+			)
 
-			c.Prune(ctx)
+			Expect(c.Prune(ctx)).To(Succeed())
 		})
 
-		It("continues after individual prune failures", func() {
-			docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, errors.New("volume"))
+		It("continues after individual prune failures and returns every error", func() {
 			docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{}, errors.New("image"))
-			docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, errors.New("cache"))
+			docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, nil)
+			docker.EXPECT().NetworkPrune(ctx, gomock.Any()).Return(mobyClient.NetworkPruneResult{}, errors.New("network"))
+			docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, nil)
 
-			c.Prune(ctx)
+			err := c.Prune(ctx)
+			Expect(err).To(MatchError(ContainSubstring("failed to prune images: image")))
+			Expect(err).To(MatchError(ContainSubstring("failed to prune networks: network")))
 		})
 	})
 
