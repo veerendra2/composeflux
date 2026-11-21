@@ -117,9 +117,11 @@ func (mr *MockDockerClientMockRecorder) LoadProject(ctx, composeCfg any) *gomock
 }
 
 // Prune mocks base method.
-func (m *MockDockerClient) Prune(ctx context.Context) {
+func (m *MockDockerClient) Prune(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Prune", ctx)
+	ret := m.ctrl.Call(m, "Prune", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Prune indicates an expected call of Prune.

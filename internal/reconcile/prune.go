@@ -11,61 +11,12 @@ import (
 	"github.com/veerendra2/composeflux/pkg/dockercompose"
 )
 
-// PruneResources removes unused Docker resources when every source stack is healthy.
+// PruneResources removes unused Docker resources from the host.
 func (r *Reconciler) PruneResources(ctx context.Context) error {
 	r.reconcileMu.Lock()
 	defer r.reconcileMu.Unlock()
 
-	repoPath, stackRoot, err := r.sourceRoots()
-	if err != nil {
-		return err
-	}
-	globalEnvs, _, _, err := r.loadStackConfig(stackRoot)
-	if err != nil {
-		return err
-	}
-
-	srcStacks, err := discoverComposeStacks(stackRoot, globalEnvs)
-	if err != nil {
-		return err
-	}
-
-	stackStatuses, err := r.getStackStates(ctx)
-	if err != nil {
-		return err
-	}
-
-	sharedSecrets, _, err := r.loadSharedSecrets(stackRoot)
-	if err != nil {
-		return err
-	}
-
-	// We skip pruning if any stack is missing from Docker, unhealthy, or suspended
-	// See https://github.com/veerendra2/composeflux/issues/31
-	for _, src := range srcStacks {
-		stackName := filepath.Base(src.WorkingDir)
-		status, exists := stackStatuses[stackName]
-		if !exists {
-			slog.Warn("Skipping prune", "reason", "stack not running in docker", "stack_name", stackName)
-			return nil
-		}
-		if !status.Healthy {
-			slog.Warn("Skipping prune", "reason", "unhealthy stack", "stack_name", stackName)
-			return nil
-		}
-		loaded, err := r.loadProjectWithSecrets(ctx, repoPath, src, sharedSecrets)
-		if err != nil {
-			return fmt.Errorf("failed to load stack %s for pruning: %w", stackName, err)
-		}
-		if hasProjectLabel(loaded.project, LabelSuspend) {
-			slog.Warn("Skipping prune", "reason", "suspended stack", "stack_name", stackName)
-			return nil
-		}
-	}
-
-	slog.Info("Pruning unused Docker resources")
-	r.dClient.Prune(ctx)
-	return nil
+	return r.dClient.Prune(ctx)
 }
 
 // Prune deletes the running stacks which are not in the source repository
