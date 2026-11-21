@@ -14,17 +14,18 @@ import (
 func (c *client) Prune(ctx context.Context) error {
 	var errs []error
 	var reclaimed uint64
-	var volumes, networks, cacheEntries int
+	var images, volumes, networks, cacheEntries int
 
 	// All unused images, tagged or untagged. Docker keeps any image a container uses.
-	images, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{
+	imageResult, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{
 		Filters: mobyClient.Filters{}.Add("dangling", "false"),
 	})
 	if err != nil {
 		slog.Warn("Failed to prune images", "error", err)
 		errs = append(errs, fmt.Errorf("failed to prune images: %w", err))
 	} else {
-		reclaimed += images.Report.SpaceReclaimed
+		images = len(imageResult.Report.ImagesDeleted)
+		reclaimed += imageResult.Report.SpaceReclaimed
 	}
 
 	// Anonymous volumes only. Named volumes hold stack data.
@@ -54,12 +55,19 @@ func (c *client) Prune(ctx context.Context) error {
 		reclaimed += buildResult.Report.SpaceReclaimed
 	}
 
-	slog.Info("Pruned Docker resources",
+	attrs := []any{
+		"images_deleted", images,
 		"volumes_deleted", volumes,
 		"networks_deleted", networks,
 		"build_cache_entries_deleted", cacheEntries,
 		"space_reclaimed", reclaimed,
-		"failed_resources", len(errs))
+		"failed_resources", len(errs),
+	}
+	if len(errs) == 0 {
+		slog.Info("Pruned Docker resources", attrs...)
+	} else {
+		slog.Warn("Docker resource prune finished with errors", attrs...)
+	}
 
 	return errors.Join(errs...)
 }

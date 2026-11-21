@@ -139,7 +139,7 @@ Every option has an environment variable and a command-line flag. Flags apply to
 | `GIT_INTERVAL`              | `--git-interval`          | `5m`        | Git polling interval. Must be greater than zero.                                                                                           |
 | `HEALTH_RECONCILE_INTERVAL` | `--health-interval`       | `0`         | Health reconciliation interval. `0` disables it.                                                                                           |
 | `IMAGE_UPDATE_SCHEDULE`     | `--image-update-schedule` | empty       | Cron expression for image update checks. Empty disables it.                                                                                |
-| `PRUNE_INTERVAL`            | `--prune-interval`        | `24h`       | Host-wide Docker resource prune interval. `0` disables it. See [Resource pruning](Overview.md#resource-pruning) before enabling it on a shared host. |
+| `PRUNE_INTERVAL`            | `--prune-interval`        | `24h`       | Host-wide Docker resource prune interval. `0` disables it. See [Resource pruning](Overview.md#resource-pruning) for scope.                 |
 
 ### Git
 

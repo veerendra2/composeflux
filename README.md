@@ -20,7 +20,7 @@
 <a href="https://codecov.io/gh/veerendra2/composeflux"><img src="https://img.shields.io/codecov/c/github/veerendra2/composeflux?style=flat&logo=codecov&logoColor=white" alt="Coverage"></a>
 <a href="https://github.com/veerendra2/composeflux/releases/latest"><img src="https://img.shields.io/github/v/release/veerendra2/composeflux?style=flat&logo=github" alt="Release"></a>
 <a href="https://ghcr.io/veerendra2/composeflux"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64-blue?style=flat&logo=docker&logoColor=white" alt="Docker"></a>
-<img src="https://img.shields.io/badge/Image%20Size-~60%20MB-blue?style=flat&logo=docker&logoColor=white" alt="Docker image size">
+<img src="https://img.shields.io/badge/Image%20Size-~70%20MB-blue?style=flat&logo=docker&logoColor=white" alt="Docker image size">
 </p>
 
 > **Currently in beta.** Expect heavy refactoring and breaking changes as the project evolves toward v1.0. See

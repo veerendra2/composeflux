@@ -130,7 +130,8 @@ running, the next invocation is skipped.
     - **Images:** every unused image, tagged or untagged. Docker keeps any image a container uses.
     - **Volumes:** unused anonymous volumes. Named volumes are kept on Docker Engine 23 and later; older versions also
       remove unused named volumes.
-    - **Networks:** unused networks.
+    - **Networks:** unused networks, including user-defined networks with no attached container. A stopped stack's
+      `external: true` network is removed too, so recreate it before deploying that stack.
     - **Build cache:** all build cache.
     - **Containers:** not pruned.
 
