@@ -121,10 +121,12 @@ var _ = Describe("client", func() {
 		})
 
 		It("continues after individual prune failures and returns every error", func() {
-			docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{}, errors.New("image"))
-			docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, nil)
-			docker.EXPECT().NetworkPrune(ctx, gomock.Any()).Return(mobyClient.NetworkPruneResult{}, errors.New("network"))
-			docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, nil)
+			gomock.InOrder(
+				docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{}, errors.New("image")),
+				docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, nil),
+				docker.EXPECT().NetworkPrune(ctx, gomock.Any()).Return(mobyClient.NetworkPruneResult{}, errors.New("network")),
+				docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, nil),
+			)
 
 			err := c.Prune(ctx)
 			Expect(err).To(MatchError(ContainSubstring("failed to prune images: image")))

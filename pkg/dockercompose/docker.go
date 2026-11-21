@@ -54,13 +54,12 @@ func (c *client) Prune(ctx context.Context) error {
 		reclaimed += buildResult.Report.SpaceReclaimed
 	}
 
-	if len(errs) == 0 {
-		slog.Info("Pruned Docker resources",
-			"volumes_deleted", volumes,
-			"networks_deleted", networks,
-			"build_cache_entries_deleted", cacheEntries,
-			"space_reclaimed", reclaimed)
-	}
+	slog.Info("Pruned Docker resources",
+		"volumes_deleted", volumes,
+		"networks_deleted", networks,
+		"build_cache_entries_deleted", cacheEntries,
+		"space_reclaimed", reclaimed,
+		"failed_resources", len(errs))
 
 	return errors.Join(errs...)
 }
