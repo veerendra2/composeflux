@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/docker/go-units"
 	mobyClient "github.com/moby/moby/client"
 )
 
@@ -24,7 +25,12 @@ func (c *client) Prune(ctx context.Context) error {
 		slog.Warn("Failed to prune images", "error", err)
 		errs = append(errs, fmt.Errorf("failed to prune images: %w", err))
 	} else {
-		images = len(imageResult.Report.ImagesDeleted)
+		// One entry per untagged tag plus one per deleted image; count the image only.
+		for _, d := range imageResult.Report.ImagesDeleted {
+			if d.Deleted != "" {
+				images++
+			}
+		}
 		reclaimed += imageResult.Report.SpaceReclaimed
 	}
 
@@ -60,7 +66,7 @@ func (c *client) Prune(ctx context.Context) error {
 		"volumes_deleted", volumes,
 		"networks_deleted", networks,
 		"build_cache_entries_deleted", cacheEntries,
-		"space_reclaimed", reclaimed,
+		"space_reclaimed", units.HumanSize(float64(reclaimed)),
 		"failed_resources", len(errs),
 	}
 	if len(errs) == 0 {
