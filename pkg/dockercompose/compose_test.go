@@ -122,15 +122,17 @@ var _ = Describe("client", func() {
 			Expect(c.Prune(ctx)).To(Succeed())
 		})
 
-		It("counts deleted images and logs reclaimed space in human units", func() {
+		It("counts image deletion records and logs reclaimed space in human units", func() {
 			logs := captureLogs()
 			docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{
 				Report: image.PruneReport{
-					// Two tags untagged, one image deleted.
+					// Two tags untagged, then the image and its two unshared layers deleted.
 					ImagesDeleted: []image.DeleteResponse{
 						{Untagged: "app:latest"},
 						{Untagged: "app:v1.2"},
 						{Deleted: "sha256:abc"},
+						{Deleted: "sha256:layer1"},
+						{Deleted: "sha256:layer2"},
 					},
 					SpaceReclaimed: 1 << 30,
 				},
@@ -142,7 +144,7 @@ var _ = Describe("client", func() {
 			Expect(c.Prune(ctx)).To(Succeed())
 
 			attrs := recordAttrs(logs.records[len(logs.records)-1])
-			Expect(attrs).To(HaveKeyWithValue("images_deleted", "1"))
+			Expect(attrs).To(HaveKeyWithValue("image_records_deleted", "3"))
 			Expect(attrs).To(HaveKeyWithValue("space_reclaimed", units.HumanSize(1<<30)))
 		})
 

@@ -15,7 +15,7 @@ import (
 func (c *client) Prune(ctx context.Context) error {
 	var errs []error
 	var reclaimed uint64
-	var images, volumes, networks, cacheEntries int
+	var imageRecords, volumes, networks, cacheEntries int
 
 	// All unused images, tagged or untagged. Docker keeps any image a container uses.
 	imageResult, err := c.docker.ImagePrune(ctx, mobyClient.ImagePruneOptions{
@@ -25,10 +25,11 @@ func (c *client) Prune(ctx context.Context) error {
 		slog.Warn("Failed to prune images", "error", err)
 		errs = append(errs, fmt.Errorf("failed to prune images: %w", err))
 	} else {
-		// One entry per untagged tag plus one per deleted image; count the image only.
+		// One record per untagged tag, deleted image, and removed layer; the response
+		// does not distinguish image IDs from layer IDs, so only the total is known.
 		for _, d := range imageResult.Report.ImagesDeleted {
 			if d.Deleted != "" {
-				images++
+				imageRecords++
 			}
 		}
 		reclaimed += imageResult.Report.SpaceReclaimed
@@ -62,7 +63,7 @@ func (c *client) Prune(ctx context.Context) error {
 	}
 
 	attrs := []any{
-		"images_deleted", images,
+		"image_records_deleted", imageRecords,
 		"volumes_deleted", volumes,
 		"networks_deleted", networks,
 		"build_cache_entries_deleted", cacheEntries,
