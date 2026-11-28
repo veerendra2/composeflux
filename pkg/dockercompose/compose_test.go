@@ -6,7 +6,9 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/compose/v5/pkg/api"
+	"github.com/docker/go-units"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/image"
 	mobyClient "github.com/moby/moby/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -107,24 +109,57 @@ var _ = Describe("client", func() {
 	})
 
 	Describe("Prune", func() {
-		It("prunes volumes, dangling images, and all build cache", func() {
-			docker.EXPECT().VolumePrune(ctx, mobyClient.VolumePruneOptions{}).Return(mobyClient.VolumePruneResult{}, nil)
-			docker.EXPECT().ImagePrune(ctx, gomock.Any()).DoAndReturn(
-				func(_ context.Context, options mobyClient.ImagePruneOptions) (mobyClient.ImagePruneResult, error) {
-					Expect(options.Filters).To(HaveKeyWithValue("dangling", HaveKey("true")))
-					return mobyClient.ImagePruneResult{}, nil
-				})
-			docker.EXPECT().BuildCachePrune(ctx, mobyClient.BuildCachePruneOptions{All: true}).Return(mobyClient.BuildCachePruneResult{}, nil)
+		It("prunes all unused images, anonymous volumes, unused networks, and all build cache", func() {
+			gomock.InOrder(
+				docker.EXPECT().ImagePrune(ctx, mobyClient.ImagePruneOptions{
+					Filters: mobyClient.Filters{}.Add("dangling", "false"),
+				}).Return(mobyClient.ImagePruneResult{}, nil),
+				docker.EXPECT().VolumePrune(ctx, mobyClient.VolumePruneOptions{}).Return(mobyClient.VolumePruneResult{}, nil),
+				docker.EXPECT().NetworkPrune(ctx, mobyClient.NetworkPruneOptions{}).Return(mobyClient.NetworkPruneResult{}, nil),
+				docker.EXPECT().BuildCachePrune(ctx, mobyClient.BuildCachePruneOptions{All: true}).Return(mobyClient.BuildCachePruneResult{}, nil),
+			)
 
-			c.Prune(ctx)
+			Expect(c.Prune(ctx)).To(Succeed())
 		})
 
-		It("continues after individual prune failures", func() {
-			docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, errors.New("volume"))
-			docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{}, errors.New("image"))
-			docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, errors.New("cache"))
+		It("counts image deletion records and logs reclaimed space in human units", func() {
+			logs := captureLogs()
+			docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{
+				Report: image.PruneReport{
+					// Two tags untagged, then the image and its two unshared layers deleted.
+					ImagesDeleted: []image.DeleteResponse{
+						{Untagged: "app:latest"},
+						{Untagged: "app:v1.2"},
+						{Deleted: "sha256:abc"},
+						{Deleted: "sha256:layer1"},
+						{Deleted: "sha256:layer2"},
+					},
+					SpaceReclaimed: 1 << 30,
+				},
+			}, nil)
+			docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, nil)
+			docker.EXPECT().NetworkPrune(ctx, gomock.Any()).Return(mobyClient.NetworkPruneResult{}, nil)
+			docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, nil)
 
-			c.Prune(ctx)
+			Expect(c.Prune(ctx)).To(Succeed())
+
+			attrs := recordAttrs(logs.records[len(logs.records)-1])
+			Expect(attrs).To(HaveKeyWithValue("image_records_deleted", "3"))
+			Expect(attrs).To(HaveKeyWithValue("space_reclaimed", units.HumanSize(1<<30)))
+		})
+
+		It("continues after individual prune failures and returns every error", func() {
+			gomock.InOrder(
+				docker.EXPECT().ImagePrune(ctx, gomock.Any()).Return(mobyClient.ImagePruneResult{}, errors.New("image")),
+				docker.EXPECT().VolumePrune(ctx, gomock.Any()).Return(mobyClient.VolumePruneResult{}, nil),
+				docker.EXPECT().NetworkPrune(ctx, gomock.Any()).Return(mobyClient.NetworkPruneResult{}, errors.New("network")),
+				docker.EXPECT().BuildCachePrune(ctx, gomock.Any()).Return(mobyClient.BuildCachePruneResult{}, errors.New("cache")),
+			)
+
+			err := c.Prune(ctx)
+			Expect(err).To(MatchError(ContainSubstring("failed to prune images: image")))
+			Expect(err).To(MatchError(ContainSubstring("failed to prune networks: network")))
+			Expect(err).To(MatchError(ContainSubstring("failed to prune build cache: cache")))
 		})
 	})
 

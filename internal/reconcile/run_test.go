@@ -98,6 +98,10 @@ var _ = Describe("Run", func() {
 		var failures atomic.Int32
 		f.git.EXPECT().Pull(gomock.Any()).Return(nil, nil)
 		f.docker.EXPECT().Ps(gomock.Any(), "app").Return(healthy(), nil)
+		f.docker.EXPECT().Prune(gomock.Any()).DoAndReturn(func(context.Context) error {
+			failures.Add(1)
+			return errors.New("prune failed")
+		}).MinTimes(1)
 		gomock.InOrder(
 			// The initial sync lists stacks for state and pruning.
 			f.docker.EXPECT().List(gomock.Any()).Return([]api.Stack{{Name: "app"}}, nil).Times(2),

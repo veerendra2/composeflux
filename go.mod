@@ -10,6 +10,7 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/docker/cli v29.10.0+incompatible
 	github.com/docker/compose/v5 v5.7.1
+	github.com/docker/go-units v0.5.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/infisical/go-sdk v0.9.1
 	github.com/moby/moby/api v1.57.0
@@ -72,7 +73,6 @@ require (
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/docker/docker-credential-helpers v0.9.9 // indirect
 	github.com/docker/go-connections v0.8.2 // indirect
-	github.com/docker/go-units v0.5.0 // indirect
 	github.com/docker/secrets-engine/client v0.2.2 // indirect
 	github.com/docker/secrets-engine/x v0.8.5 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect

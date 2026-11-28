@@ -31,7 +31,7 @@ type Client interface {
 	Pull(ctx context.Context, project *types.Project) error
 	Up(ctx context.Context, project *types.Project) error
 
-	Prune(ctx context.Context)
+	Prune(ctx context.Context) error
 	Version(ctx context.Context) ([]any, error)
 }
 
